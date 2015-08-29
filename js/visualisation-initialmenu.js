@@ -1,9 +1,10 @@
-define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "visualisation-zoomout", "db", "conversations", "datetime"
-], function(Webtext, Visualisations, LanguagesList, JsonModels, Model, Zoomout, Db, ConversationManager, DateTime) {
+define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "visualisation-zoomout", "db", "conversations", "datetime", 'visualisation-conversation-graph'
+], function(Webtext, Visualisations, LanguagesList, JsonModels, Model, Zoomout, Db, ConversationManager, DateTime, ConversationGraph) {
 
 	//Contains the html code of the initial menu and the visualization for the background graph animation, with the same structure than "visualization-zoomout.js" (although not the last version) (look this for more details)
 	
 	Visualisations.register(new InitialMenu()); //adds the InitialMenu visualization to the Visualizations array
+	Visualisations.register(new ConversationGraph()); // number 3
 	
 	//stablishes the name and defines the Abstraction and Presentation modules of the visualization
 	function InitialMenu() {
@@ -128,6 +129,11 @@ define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "vis
 								<div class="big_label noselect">'+Webtext.tx_join+'</div>   \
 							  </center>   \
 							</div>   \
+							<div class="small_panel noselect">    \
+							  <center>  \
+								<div id="bt_conversations" class="small_button">'+Webtext.tx_participate+'</div>   \
+							  </center>   \
+							</div>   \
 						 </center>   \
 					  </div>  \
 						\
@@ -210,6 +216,7 @@ define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "vis
 			
 			$( "#bt_sandbox" )[0].onclick = this.bindings.bt_sandbox.bind(this);
 			$( "#bt_create" )[0].onclick = this.bindings.bt_create.bind(this);
+			$( "#bt_conversations" )[0].onclick = this.bindings.bt_conversations.bind(this);
 			$( "#bt_join" )[0].onclick = this.bindings.bt_join.bind(this);
 			$( "#bt_join_ok" )[0].onclick = this.bindings.bt_join_ok.bind(this);
 			$( "#bt_join_cancel" )[0].onclick = this.bindings.bt_cancel.bind(this);
@@ -412,6 +419,11 @@ define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "vis
 			bt_sandbox: function(){
 				$('#menu_panel').animate({left: "100%"},700,'easeInOutCubic');
 				ConversationManager.loadSandbox();
+			},
+			bt_conversations: function() {
+				$('#menu_panel').animate({left: "100%"},700,'easeInOutCubic');
+				Visualisations.select(3).init($('#visualisationMain')[0]);
+				//$('#conversation_graph_panel').animate({left: "30%"},700,'easeInOutCubic');
 			},
 			//loads an existing conversation
 			bt_join_ok: function(){

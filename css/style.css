@@ -147,3 +147,67 @@ body {
 #visualisationMain {
     width: 100%;
 }
+
+.small_panel{
+	display: inline-block;
+	position:relative;
+	margin-left:35px;
+	margin-right:35px;
+	width: 240px;
+	height: 80px;
+	background: rgba(65,99,233,0.1);
+	background: rgba(210, 212, 254, 0.35);
+	border: solid 1px #ccc;
+	-webkit-border-radius: 25px;
+	-moz-border-radius: 25px;
+	border-radius: 25px;
+}
+
+.small_button{
+	display: inline-block;
+	position: relative;
+	top: 20px;
+	margin:0px;
+	width: 150px;
+	height: 40px;
+	background: #b3b3ff;
+	text-align: center;
+	line-height:30px;
+	font-size: 17pt;
+	border: solid 2px #336;
+	-webkit-border-radius: 15px;
+	-moz-border-radius: 15px;
+	border-radius: 15px;
+	-webkit-box-shadow: -1px 1px 2px 1px rgba(0, 0, 0, 0.5);
+	-moz-box-shadow: -1px 1px 2px 1px rgba(0, 0, 0, 0.5);
+	box-shadow: -1px 1px 2px 1px rgba(0, 0, 0, 0.5); 
+}
+
+
+
+.small_label{
+	display: inline-block;
+	position: relative;
+	top: 55px;
+	margin:0px;
+	width: 240px;
+	height: 30px;
+	background: rgba(0,0,0,0);
+	text-align: center;
+	line-height:10px;
+	font-size: 12pt;
+}
+
+div.small_button:hover{
+	border-color: #c33;
+}
+
+div.small_button:hover + .big_label{
+	text-shadow: 0 0 0.05em #fc0,  0 0 0.05em #fc0, 0 0 1.5em #fc3;
+}
+
+div.small_button:active{
+	-webkit-box-shadow: inset -1px 1px 2px 1px rgba(0, 0, 0, 0.5);
+	-moz-box-shadow: inset -1px 1px 2px 1px rgba(0, 0, 0, 0.5);
+	box-shadow: inset -1px 1px 2px 1px rgba(0, 0, 0, 0.5); 
+}
