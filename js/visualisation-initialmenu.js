@@ -26,7 +26,9 @@ define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "vis
 	    	return this.presentation.bindings;
 	    }
 	
-	    this.destroy = function () {}
+	    this.destroy = function () {
+	    	this.presentation.destroy();
+	    }
 	
 	}
 	
@@ -239,6 +241,10 @@ define(["webtext", "visualisation", "languageslist", "jsonmodels", "model", "vis
 			preparelangfilter();
 			prepareconvlistselect();
 	    };
+	    
+	    this.destroy = function() {
+	    	if(pulses) clearInterval(pulses);
+	    }
 		
 	
 		//initialization and definition of the SVG and its elements (the graph with nodes, links, prelink line, the force)
