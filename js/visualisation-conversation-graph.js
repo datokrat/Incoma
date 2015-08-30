@@ -128,24 +128,64 @@ define(['pac-builder', 'db', 'event'], function(PacBuilder, Db, Events) {
 			nodes = svgContainer.selectAll(".node")
 	            .data(graph.nodes)
 	            .enter().append('g');
+	            
 	        appendConversationSymbolTo(nodes);
-				
-			nodes
-				.call(force.drag);
 			
-			force.on('tick', function() {
-				links
-					.attr('x1', function(d) { return d.source.x })
-					.attr('y1', function(d) { return d.source.y })
-					.attr('x2', function(d) { return d.target.x })
-					.attr('y2', function(d) { return d.target.y });
-				nodes
-					.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
-					//.attr("cx", function (d) {return d.x;})
-	                //.attr("cy", function (d) {return d.y;});
-			});
-			
+			nodes.call(force.drag);
+			force.on('tick', onTick);
 			force.start();
+		}
+	
+		function onTick() {
+			links
+				.attr('x1', function(d) { return d.source.x })
+				.attr('y1', function(d) { return d.source.y })
+				.attr('x2', function(d) { return d.target.x })
+				.attr('y2', function(d) { return d.target.y });
+			nodes
+				.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
+		}
+		
+		function appendConversationSymbolTo(parent) {
+			parent
+	            .append("circle")
+	            .attr("class", "node")
+	            .attr("r", 15)
+	            .attr('cx', 0)
+	            .attr('cy', 0)
+				.style("stroke", '#888')
+				.style("stroke-width", '1px')
+				.style("fill-opacity",0);
+	        parent
+	            .append("circle")
+	            .attr("class", "node")
+	            .attr("r", 3)
+	            .attr('cx', 7)
+	            .attr('cy', 0)
+				.style("stroke", '#888')
+				.style("stroke-width", '1px')
+	            .style("fill", '#f9c8a4')
+				.style("fill-opacity",1);
+	        parent
+	            .append("circle")
+	            .attr("class", "node")
+	            .attr("r", 3)
+	            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
+	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
+				.style("stroke", function(d) { return (d.thoughtnum > 3) ? '#888' : '#ddd' })
+				.style("stroke-width", '1px')
+	            .style("fill", '#a2b0e7')
+				.style("fill-opacity",function(d) { return (d.thoughtnum > 3) ? 1 : 0 });
+	        parent
+	            .append("circle")
+	            .attr("class", "node")
+	            .attr("r", 3)
+	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
+	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
+				.style("stroke", function(d) { return (d.thoughtnum > 9) ? '#888' : '#ddd' })
+				.style("stroke-width", '1px')
+	            .style("fill", '#bae59a')
+				.style("fill-opacity",function(d) { return (d.thoughtnum > 9) ? 1 : 0 });
 		}
 		
 		var style;
@@ -155,48 +195,6 @@ define(['pac-builder', 'db', 'event'], function(PacBuilder, Db, Events) {
 		var force;
 		var nodes, links;
 		var graph = { nodes: [], links: [] };
-	}
-	
-	function appendConversationSymbolTo(parent) {
-		parent
-            .append("circle")
-            .attr("class", "node")
-            .attr("r", 15)
-            .attr('cx', 0)
-            .attr('cy', 0)
-			.style("stroke", '#888')
-			.style("stroke-width", '1px')
-			.style("fill-opacity",0);
-        parent
-            .append("circle")
-            .attr("class", "node")
-            .attr("r", 3)
-            .attr('cx', 7)
-            .attr('cy', 0)
-			.style("stroke", '#888')
-			.style("stroke-width", '1px')
-            .style("fill", '#f9c8a4')
-			.style("fill-opacity",1);
-        parent
-            .append("circle")
-            .attr("class", "node")
-            .attr("r", 3)
-            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
-            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
-			.style("stroke", '#888')
-			.style("stroke-width", '1px')
-            .style("fill", '#a2b0e7')
-			.style("fill-opacity",1);
-        parent
-            .append("circle")
-            .attr("class", "node")
-            .attr("r", 3)
-            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
-            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
-			.style("stroke", '#888')
-			.style("stroke-width", '1px')
-            .style("fill", '#bae59a')
-			.style("fill-opacity",1);
 	}
 	
 	function ConversationGraph_Control() {
