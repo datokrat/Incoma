@@ -1,4 +1,4 @@
-define(['pac-builder', 'model'], function(PacBuilder) {
+define(['pac-builder', 'db', 'event'], function(PacBuilder, Db, Events) {
 	function ConversationGraph() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -15,7 +15,37 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 	}
 	
 	function ConversationGraph_Abstraction() {
-		this.init = function() {}
+		var _this = this;
+		this.conversationListChanged = new Events.EventImpl();
+		
+		this.init = function() {
+			loadConversationList().done(ready);
+		}
+		
+		function ready() {
+			readyPromise.resolve();
+		}
+		
+		this.waitUntilReady = function() {
+			return ready;
+		}
+		
+		this.getConversationList = function() {
+			return conversationList;
+		}
+		
+		function loadConversationList() {
+			var promise = $.Deferred();
+			Db.getconversations(function(resultList) {
+				conversationList = resultList;
+				_this.conversationListChanged.raise(conversationList);
+				promise.resolve();
+			});
+			return promise;
+		}
+		
+		var conversationList = [];
+		var readyPromise = $.Deferred();
 	}
 	
 	function ConversationGraph_Presentation(ABSTR) {
@@ -24,16 +54,13 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 		this.init = function(html5node) {
 			insertStyle();
 			insertHtml(html5node)
-			.done(initSvg)
-			.done(initForce);
+			.then(initSvg)
+			.then(ABSTR.waitUntilReady)
+			.then(initForce);
 		}
 		
 		this.destroy = function() {
 			style.remove();
-		}
-		
-		function onBackgroundClick() {
-			alert('bg');
 		}
 		
 		function insertStyle() {
@@ -46,7 +73,7 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 			return $.ajax({ url: './templates/conversation-graph.html', dataType: 'html' })
 			.done(function(template) {
 				$(html5node).html(template);
-				//makes the right_bar resizable
+				
 				$(".right_bar").resizable({
 					handles: 'w, s',
 					minWidth: 335,
@@ -67,20 +94,21 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 			.attr('id', 'bg')
 			.attr('height', height)
 			.attr('fill', 'white')
-			.on('click', onBackgroundClick);
+			.on('click', null /*TODO*/);
 			
 			svgContainer = svg.append('svg:g')
 			.append('svg:g')
 		}
 		
 		function initForce() {
-			graph.nodes = [{},{}, {}];
-			graph.links = [{ source: 0, target: 1 }];
+			graph.nodes = ABSTR.getConversationList();
+			//graph.links = [{ source: 0, target: 1 }];
+			graph.links = [];
 			
 			force = d3.layout.force()
-				.charge(-1000)
+				.charge(-500)
 				.gravity(0.15)
-				.linkDistance(60)
+				.linkDistance(150)
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
@@ -91,7 +119,6 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 	            .data(graph.links)
 	            .enter().append("line")
 	            .attr("class", "link")
-				//.attr("marker-start", PRES.liveAttributes.linkArrow)
 	            .style("stroke", '#444')
 	            .style("stroke-width", 5)
 				.style("stroke-dasharray", '8,6')
@@ -100,13 +127,9 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 				
 			nodes = svgContainer.selectAll(".node")
 	            .data(graph.nodes)
-	            .enter().append("circle")
-	            .attr("class", "node")
-	            .attr("r", 15)
-				.style("stroke", '#888')
-				.style("stroke-width", '1px')
-	            .style("fill", '#aaa')
-				.style("fill-opacity",1);
+	            .enter().append('g');
+	        appendConversationSymbolTo(nodes);
+				
 			nodes
 				.call(force.drag);
 			
@@ -117,8 +140,9 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 					.attr('x2', function(d) { return d.target.x })
 					.attr('y2', function(d) { return d.target.y });
 				nodes
-					.attr("cx", function (d) {return d.x;})
-	                .attr("cy", function (d) {return d.y;});
+					.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
+					//.attr("cx", function (d) {return d.x;})
+	                //.attr("cy", function (d) {return d.y;});
 			});
 			
 			force.start();
@@ -133,8 +157,46 @@ define(['pac-builder', 'model'], function(PacBuilder) {
 		var graph = { nodes: [], links: [] };
 	}
 	
-	function onMouseOverNode() {
-		console.log('overnode');
+	function appendConversationSymbolTo(parent) {
+		parent
+            .append("circle")
+            .attr("class", "node")
+            .attr("r", 15)
+            .attr('cx', 0)
+            .attr('cy', 0)
+			.style("stroke", '#888')
+			.style("stroke-width", '1px')
+			.style("fill-opacity",0);
+        parent
+            .append("circle")
+            .attr("class", "node")
+            .attr("r", 3)
+            .attr('cx', 7)
+            .attr('cy', 0)
+			.style("stroke", '#888')
+			.style("stroke-width", '1px')
+            .style("fill", '#f9c8a4')
+			.style("fill-opacity",1);
+        parent
+            .append("circle")
+            .attr("class", "node")
+            .attr("r", 3)
+            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
+            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
+			.style("stroke", '#888')
+			.style("stroke-width", '1px')
+            .style("fill", '#a2b0e7')
+			.style("fill-opacity",1);
+        parent
+            .append("circle")
+            .attr("class", "node")
+            .attr("r", 3)
+            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
+            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
+			.style("stroke", '#888')
+			.style("stroke-width", '1px')
+            .style("fill", '#bae59a')
+			.style("fill-opacity",1);
 	}
 	
 	function ConversationGraph_Control() {
