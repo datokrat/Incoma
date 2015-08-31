@@ -807,6 +807,11 @@ div.big_button:active{
 	fill: white;
 }
 
+.invisible.node {
+	stroke: rgba(0,0,0,0);
+	fill: rgba(0,0,0,0);
+}
+
 .ui-resizable { position: relative;}
 .ui-resizable-handle { position: absolute;font-size: 0.1px; z-index: -10; display: block; }
 

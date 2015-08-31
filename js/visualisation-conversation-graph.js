@@ -87,6 +87,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
+		console.log('over');
 			if(mouseOverNode == d || ABSTR.selectedConversation == d) return;
 			
 			mouseOverNode = d;
@@ -96,6 +97,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function onMouseOutConversation(d) {
+			console.log('out');
 			if(mouseOverNode == d) {
 				mouseOverNode = null;
 				hideTooltip();
@@ -259,6 +261,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
+	            
+	        //put an invisible circle layer on top of everything so that the mouseover event is only raised once when moving the mouse over the node
+	        parent
+	        	.append('circle')
+	        	.attr('class', 'invisible node')
+	            .attr("r", 15)
+	            .attr('cx', 0)
+	            .attr('cy', 0)
 		}
 		
 		var style;
