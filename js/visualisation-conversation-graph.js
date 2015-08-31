@@ -86,8 +86,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 				clearConversationDetails();
 		}
 		
+		function onDblClickConversation(d) {
+				d.expanded = !d.expanded;
+				updateGraph();
+		}
+		
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
-		console.log('over');
 			if(mouseOverNode == d || ABSTR.selectedConversation == d) return;
 			
 			mouseOverNode = d;
@@ -97,7 +101,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function onMouseOutConversation(d) {
-			console.log('out');
 			if(mouseOverNode == d) {
 				mouseOverNode = null;
 				hideTooltip();
@@ -190,7 +193,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			graph.links = [];
 			
 			force = d3.layout.force()
-				.charge(-500)
+				.charge(liveAttributes.charge)
 				.gravity(0.15)
 				.linkDistance(150)
 				.theta(0.95)
@@ -218,9 +221,21 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			nodes.on('click', ABSTR.selectConversation);
 			nodes.on('mouseover', onMouseOverConversation);
 			nodes.on('mouseout', onMouseOutConversation);
+			nodes.on('dblclick', onDblClickConversation);
 			nodes.call(force.drag);
 			force.on('tick', onTick);
 			force.start();
+		}
+		
+		function updateGraph() {
+			//updateLinks();
+			updateNodeAttributes();
+			force.start();
+		}
+		
+		function updateNodeAttributes() {
+			nodes.selectAll('*').remove();
+			appendConversationSymbolTo(nodes);
 		}
 	
 		function onTick() {
@@ -237,13 +252,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			parent
 	            .append("circle")
 	            .attr("class", "conv node")
-	            .attr("r", 15)
+	            .attr("r", liveAttributes.conversationRadius)
 	            .attr('cx', 0)
 	            .attr('cy', 0)
 	        parent
 	            .append("circle")
 	            .attr("class", "sub node")
 	            .attr('data-filled', '1')
+	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr("r", 3)
 	            .attr('cx', 7)
 	            .attr('cy', 0)
@@ -251,6 +267,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .append("circle")
 	            .attr("class", "sub node")
 	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? '2' : 'false' })
+	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
@@ -258,6 +275,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .append("circle")
 	            .attr("class", "sub node")
 	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? '3' : 'false' })
+	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
@@ -266,7 +284,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	        parent
 	        	.append('circle')
 	        	.attr('class', 'invisible node')
-	            .attr("r", 15)
+	            .attr("r", liveAttributes.conversationRadius)
 	            .attr('cx', 0)
 	            .attr('cy', 0)
 		}
@@ -280,10 +298,55 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var graph = { nodes: [], links: [] };
 		var mouseOverNode = null;
 		var tooltip;
+		var liveAttributes = new LiveAttributes();
 	}
 	
 	function ConversationGraph_Control() {
 		this.init = function() {}
+	}
+	
+	function LiveAttributes() {
+		this.conversationRadius = function(d) {
+			return value(liveAttributes(d).conversationRadius, d);
+		}
+		
+		this.charge = function(d) {
+			return value(liveAttributes(d).charge, d);
+		}
+		
+		this.conversationLoading = function(d) {
+			return value(liveAttributes(d).conversationLoading, d);
+		}
+		
+		function liveAttributes(d) {
+			return d.expanded ? expanded : collapsed;
+		}
+		
+		function value(valueOrFunction, d) {
+			if(typeof valueOrFunction == 'function') return valueOrFunction(d);
+			else return valueOrFunction;
+		}
+		
+		var collapsed = new CollapsedConversationLiveAttributes();
+		var expanded = new ExpandedConversationLiveAttributes();
+	}
+	
+	function CollapsedConversationLiveAttributes() {
+		this.conversationRadius = 15;
+		this.charge = -500;
+		this.conversationLoading = false;
+	}
+	
+	function ExpandedConversationLiveAttributes() {
+		this.conversationRadius = function(d) {
+			return 30 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
+		}
+		
+		this.charge = function(d) {
+			return -1000 * Math.sqrt(d.thoughtnum) - 500;
+		}
+		
+		this.conversationLoading = true;
 	}
 	
 	var ConversationDetailsMode = {

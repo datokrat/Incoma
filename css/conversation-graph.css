@@ -812,6 +812,10 @@ div.big_button:active{
 	fill: rgba(0,0,0,0);
 }
 
+.sub.node[data-loading=true] {
+	animation: loadingSubNode 2s ease infinite;
+}
+
 .ui-resizable { position: relative;}
 .ui-resizable-handle { position: absolute;font-size: 0.1px; z-index: -10; display: block; }
 
@@ -842,4 +846,16 @@ div.big_button:active{
 
 .hide {
 	display: none;
+}
+
+@keyframes loadingSubNode {
+	0% {
+		opacity: 1;
+		transform: rotate(0deg);
+	}
+	
+	100% {
+		opacity: 0;
+		transform: rotate(360deg);
+	}
 }
