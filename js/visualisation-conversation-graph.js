@@ -92,8 +92,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
-			if(mouseOverNode == d || ABSTR.selectedConversation == d) return;
-			
+			if(mouseOverNode == d) return;
 			mouseOverNode = d;
 			var domNode = $(nodes.filter(function(d) { return d.hash == mouseOverNode.hash })[0]);
 			tooltip.text(d.title);
@@ -108,7 +107,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function showTooltipAtJQueryNode(node) {
-			tooltip.css('left', node.offset().left - tooltip.width()/2);
+			console.log(node.offset(), $('svg').offset())
+			tooltip.css('left', node.offset().left - tooltip.outerWidth()/2);
 			tooltip.css('top', node.offset().top - tooltip.outerHeight());
 			tooltip.show();
 		}
