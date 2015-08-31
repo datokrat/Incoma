@@ -60,7 +60,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			var promise = $.Deferred();
 			Db.loadAndReturnConversationModel(d.hash)
 			.then(function(model) {
+				d.loading = false;
+				d.error = false;
 				promise.resolve({ nodes: model.nodes })
+			})
+			.fail(function(error) {
+				d.loading = false;
+				d.error = error;
+				promise.reject(error);
 			});
 			//promise.resolve({ nodes: [{ hash: "a", content: "content", contentsum: "contentsum" }], links: [] });
 			return promise;
@@ -109,16 +116,22 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 				
 				if(d.expanded) {
 					ABSTR.loadConversation(d)
-					.done(onConversationLoaded.bind(_this, d));
+					.done(onConversationLoaded.bind(_this, d))
+					.fail(onConversationError.bind(_this, d));
+				}
+				else {
+					thoughtPresentation.removeConversationItems(d);
 				}
 		}
 		
 		function onConversationLoaded(conv, data) {
-			console.log('loaded', data);
-			conv.loading = false;
 			updateGraph();
 			
-			thoughtPresentation.addConversation(conv, data.nodes, data.links);
+			thoughtPresentation.addConversationItems(conv, data.nodes, data.links);
+		}
+		
+		function onConversationError(conv, error) {
+			updateGraph();
 		}
 		
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
@@ -276,6 +289,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 				.attr('y2', function(d) { return d.target.y });
 			nodes
 				.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
+				
+			thoughtPresentation.startEvolution();
 		}
 		
 		function appendConversationSymbolTo(parent) {
@@ -290,6 +305,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .attr("class", "sub node")
 	            .attr('data-filled', '1')
 	            .attr('data-loading', liveAttributes.conversationLoading)
+	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
 	            .attr("r", 3)
 	            .attr('cx', 7)
 	            .attr('cy', 0)
@@ -298,6 +314,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .attr("class", "sub node")
 	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? '2' : 'false' })
 	            .attr('data-loading', liveAttributes.conversationLoading)
+	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
@@ -306,9 +323,24 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .attr("class", "sub node")
 	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? '3' : 'false' })
 	            .attr('data-loading', liveAttributes.conversationLoading)
+	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
+	            
+	        parent
+	        	.filter(liveAttributes.error)
+	        	.append('line')
+	        	.attr({ x1: 0, x2: 0, y1: -10, y2: 0 })
+	        	.style('stroke-width', '3px')
+	        	.style('stroke', 'red')
+				.style("stroke-linecap", "round")
+	        parent
+	        	.filter(liveAttributes.error)
+	        	.append('circle')
+	        	.attr({ cx: 0, cy: 8, r: 2 })
+	        	.style('stroke-opacity', '0')
+	        	.style('fill', 'red')
 	            
 	        //put an invisible circle layer on top of everything so that the mouseover event is only raised once when moving the mouse over the node
 	        parent
@@ -353,7 +385,15 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			force.start();
 		}
 		
-		this.addConversation = function(conv, nodes, links) {
+		this.removeConversationItems = function(conv) {
+			for(var i=0; i<graph.nodes.length; ++i) if(graph.nodes[i].conversation.hash == conv.hash) graph.nodes.splice(i--, 1);
+			for(var i=0; i<graph.links.length; ++i) if(graph.links[i].conversation.hash == conv.hash) graph.links.splice(i--, 1);
+			
+			drawNodes();
+			_this.startEvolution();
+		}
+		
+		this.addConversationItems = function(conv, nodes, links) {
 			for(var i in nodes) { nodes[i].conversation = conv; graph.nodes.push(nodes[i]) }
 			for(var i in links) { links[i].conversation = conv; graph.links.push(links[i]) }
 			
@@ -386,16 +426,15 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		function gravity(alpha) {
 			for(var i in graph.nodes) {
 				var d = graph.nodes[i];
-				var factor = alpha*0.1;
+				var factor = alpha*0.2;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
 				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
 					dist = Math.sqrt(dist);
 				if(dist >= conversationRadius*0.95) {
-					factor += (dist-conversationRadius*0.95)/dist/4;
+					factor += (dist-conversationRadius*0.95)/dist/2;
 				}
 				d.x += (d.conversation.x - d.x)*factor;
 				d.y += (d.conversation.y - d.y)*factor;
-				//if(dist > 100) d.x = d.conversation.x;
 			}
 		}
 		
@@ -424,6 +463,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			return value(liveAttributes(d).conversationLoading, d);
 		}
 		
+		this.conversationSymbolVisible = function(d) {
+			return value(liveAttributes(d).conversationSymbolVisible, d);
+		}
+		
+		this.error = function(d) {
+			return d.error;
+		}
+		
 		function liveAttributes(d) {
 			return d.expanded ? expanded : collapsed;
 		}
@@ -441,6 +488,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		this.conversationRadius = 15;
 		this.charge = -500;
 		this.conversationLoading = false;
+		this.conversationSymbolVisible = function(d) {
+			return !d.error;
+		}
 	}
 	
 	function ExpandedConversationLiveAttributes() {
@@ -452,7 +502,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			return -1000 * Math.sqrt(d.thoughtnum) - 500;
 		}
 		
-		this.conversationLoading = true;
+		this.conversationLoading = function(d) {
+			return d.loading;
+		}
+		
+		this.conversationSymbolVisible = function(d) {
+			return d.loading;
+		}
 	}
 	
 	var ConversationDetailsMode = {
