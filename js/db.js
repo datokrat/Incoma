@@ -18,6 +18,14 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 		Model.clear(modeldb);
 	}
 
+	Db.loadAndReturnConversationModel = function(conv) {
+		var promise = $.Deferred();
+		
+		conversation = conv;
+		Db.getmodel(function() { promise.reject('no conversation') });
+		promise.resolve(modelfromdb);
+		return promise;
+	}
 
 	Db.getconversations = function(done){
 

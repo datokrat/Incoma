@@ -56,6 +56,16 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			return promise;
 		}
 		
+		this.loadConversation = function(d) {
+			var promise = $.Deferred();
+			Db.loadAndReturnConversationModel(d.hash)
+			.then(function(model) {
+				promise.resolve({ nodes: model.nodes })
+			});
+			//promise.resolve({ nodes: [{ hash: "a", content: "content", contentsum: "contentsum" }], links: [] });
+			return promise;
+		}
+		
 		var conversationList = [];
 		var readyPromise = $.Deferred();
 	}
@@ -72,11 +82,17 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			insertHtml(html5node)
 			.then(initSvg)
 			.then(ABSTR.waitUntilReady)
-			.then(initForce);
+			.then(initForce)
+			.then(initThoughtPresentation);
 		}
 		
 		this.destroy = function() {
 			style.remove();
+		}
+		
+		function initThoughtPresentation() {
+			thoughtPresentation = new ConversationGraph_ThoughtPresentation(ABSTR, { container: svgContainer });
+			thoughtPresentation.init();
 		}
 		
 		function onConversationSelected(d) {
@@ -88,7 +104,21 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		
 		function onDblClickConversation(d) {
 				d.expanded = !d.expanded;
+				d.loading = d.expanded ? true : false;
 				updateGraph();
+				
+				if(d.expanded) {
+					ABSTR.loadConversation(d)
+					.done(onConversationLoaded.bind(_this, d));
+				}
+		}
+		
+		function onConversationLoaded(conv, data) {
+			console.log('loaded', data);
+			conv.loading = false;
+			updateGraph();
+			
+			thoughtPresentation.addConversation(conv, data.nodes, data.links);
 		}
 		
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
@@ -289,6 +319,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	            .attr('cy', 0)
 		}
 		
+		var thoughtPresentation;
+		
 		var style;
 		var width = $(window).width();
 		var height = $(window).height();
@@ -298,6 +330,80 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var graph = { nodes: [], links: [] };
 		var mouseOverNode = null;
 		var tooltip;
+		var liveAttributes = new LiveAttributes();
+	}
+	
+	function ConversationGraph_ThoughtPresentation(ABSTR, svgData) {
+		var _this = this;
+		
+		this.init = function() {
+			force = d3.layout.force()
+				.charge(-200)
+				.gravity(0)
+				.linkDistance(150)
+				.theta(0.95)
+				.friction(0.85)
+				.size([width, height])
+				.nodes(graph.nodes)
+				.links(graph.links);
+				
+			drawNodes();
+				
+			force.on('tick', onTick);
+			force.start();
+		}
+		
+		this.addConversation = function(conv, nodes, links) {
+			for(var i in nodes) { nodes[i].conversation = conv; graph.nodes.push(nodes[i]) }
+			for(var i in links) { links[i].conversation = conv; graph.links.push(links[i]) }
+			
+			drawNodes();
+			_this.startEvolution();
+		}
+		
+		this.startEvolution = function() {
+			force.start();
+		}
+		
+		function drawNodes() {
+			if(objects.nodes) objects.nodes.remove();
+			objects.nodes = svgData.container.selectAll('.thought-node')
+				.data(graph.nodes)
+				.enter().append('circle')
+				.attr('class', 'thought-node')
+				.attr('r', 15)
+				.call(force.drag);
+		}
+		
+		function onTick(e) {
+			gravity(e.alpha);
+			
+			objects.nodes
+				.attr('cx', function(d) { return d.x })
+				.attr('cy', function(d) { return d.y })
+		}
+		
+		function gravity(alpha) {
+			for(var i in graph.nodes) {
+				var d = graph.nodes[i];
+				var factor = alpha*0.1;
+				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
+				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
+					dist = Math.sqrt(dist);
+				if(dist >= conversationRadius*0.95) {
+					factor += (dist-conversationRadius*0.95)/dist/4;
+				}
+				d.x += (d.conversation.x - d.x)*factor;
+				d.y += (d.conversation.y - d.y)*factor;
+				//if(dist > 100) d.x = d.conversation.x;
+			}
+		}
+		
+		var width = $(window).width();
+		var height = $(window).height();
+		var graph = { nodes: [], links: [] };
+		var force;
+		var objects = { nodes: null, links: null };
 		var liveAttributes = new LiveAttributes();
 	}
 	
