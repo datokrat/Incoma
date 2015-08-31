@@ -241,26 +241,24 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	        parent
 	            .append("circle")
 	            .attr("class", "sub node")
+	            .attr('data-filled', '1')
 	            .attr("r", 3)
 	            .attr('cx', 7)
 	            .attr('cy', 0)
-	            .style("fill", '#f9c8a4')
 	        parent
 	            .append("circle")
 	            .attr("class", "sub node")
-	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? true : false })
+	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? '2' : 'false' })
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
-	            .style("fill", '#a2b0e7')
 	        parent
 	            .append("circle")
 	            .attr("class", "sub node")
-	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? true : false })
+	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? '3' : 'false' })
 	            .attr("r", 3)
 	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
 	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
-	            .style("fill", '#bae59a')
 		}
 		
 		var style;

@@ -790,9 +790,21 @@ div.big_button:active{
 	fill-opacity: 1;
 }
 
-.sub.node[data-filled=false] {
+.sub.node[data-filled='1'] {
+	fill: #f9c8a4;
+}
+
+.sub.node[data-filled='2'] {
+	fill: #a2b0e7;
+}
+
+.sub.node[data-filled='3'] {
+	fill: #bae59a;
+}
+
+.sub.node[data-filled='false'] {
 	stroke: #ddd;
-	fill-opacity: 0;
+	fill: white;
 }
 
 .ui-resizable { position: relative;}
