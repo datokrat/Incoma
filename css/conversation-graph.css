@@ -820,17 +820,17 @@ div.big_button:active{
 	display: none;
 }
 
-.thought-node[data-bordermode=normal] {
+.thought-node[data-bordermode=normal], .node[data-bordermode=normal] {
 	stroke-width: 1px;
 	stroke: #888;
 }
 
-.thought-node[data-bordermode=selected] {
+.thought-node[data-bordermode=selected], .node[data-bordermode=selected] {
 	stroke-width: 3px;
 	stroke: #333;
 }
 
-.thought-node[data-bordermode=mouseover] {
+.thought-node[data-bordermode=mouseover], .node[data-bordermode=mouseover] {
 	stroke-width: 3px;
 	stroke: #c32222;
 }

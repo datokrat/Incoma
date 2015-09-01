@@ -18,10 +18,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationSelected = new Events.EventImpl();
+		this.mouseOverConversationChanged = new Events.EventImpl();
 		this.thoughtSelectionChanged = new Events.EventImpl();
 		
 		this.selectedConversation = null;
 		this.selectedThought = null;
+		this.mouseOverConversation = null;
 		
 		this.init = function() {
 			loadConversationList().done(ready);
@@ -41,6 +43,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				_this.selectThought(null);
 				_this.selectedConversation = d;
 				_this.conversationSelected.raise(_this.selectedConversation);
+			}
+		}
+		
+		this.mouseEnterConversation = function(d) {
+			if(_this.mouseOverConversation != d) {
+				_this.mouseOverConversation = d;
+				_this.mouseOverConversationChanged.raise(_this.mouseOverConversation);
 			}
 		}
 		
@@ -92,7 +101,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				d.error = error;
 				promise.reject(error);
 			});
-			//promise.resolve({ nodes: [{ hash: "a", content: "content", contentsum: "contentsum" }], links: [] });
 			return promise;
 		}
 		
@@ -108,6 +116,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			scaler = new Scaler();
 			scaler.viewPortChanged.subscribe(onViewPortChanged);
 			ABSTR.conversationSelected.subscribe(onConversationSelected);
+			ABSTR.mouseOverConversationChanged.subscribe(onMouseOverConversationChanged);
 			
 			initConstants();
 			
@@ -120,7 +129,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onViewPortChanged(args) {
-			console.log('onViewPortChanged');
 			if(args.transitionTime) setViewPort(args.translate.x, args.translate.y, args.zoom, true, args.transitionTime);
 			else setViewPort(args.translate.x, args.translate.y, args.zoom, false);
 		}
@@ -140,6 +148,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onConversationSelected(d) {
+			updateNodeAttributes();
 			if(d != null)
 				showSelectedConversationDetails(d);
 			else 
@@ -171,21 +180,23 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			updateGraph();
 		}
 		
-		function onMouseOverConversation(d) { //TODO: move to ABSTR?
-			if(mouseOverNode == d) return;
-			mouseOverNode = d;
+		function onMouseEnterConversation(d) {
+			ABSTR.mouseEnterConversation(d);
 			
 			if(d.expanded) return;
-			var domNode = $(nodes.filter(function(d) { return d.hash == mouseOverNode.hash })[0]);
+			var domNode = $(nodes.filter(function(d2) { return d2.hash == d.hash })[0]);
 			tooltip.$().text(d.title);
 			tooltip.showTooltipAt$Node(domNode);
 		}
 		
-		function onMouseOutConversation(d) {
-			if(mouseOverNode == d) {
-				mouseOverNode = null;
-				tooltip.hideTooltip();
-			}
+		function onMouseLeaveConversation(d) {
+			ABSTR.mouseEnterConversation(null);
+			
+			tooltip.hideTooltip();
+		}
+		
+		function onMouseOverConversationChanged(d) {
+			updateNodeAttributes();
 		}
 		
 		function showSelectedConversationDetails(d) {
@@ -291,8 +302,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	        appendConversationSymbolTo(nodes);
 			
 			nodes.on('click', ABSTR.selectConversation);
-			nodes.on('mouseover', onMouseOverConversation);
-			nodes.on('mouseout', onMouseOutConversation);
+			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
+			//nodes.on('mouseover', onMouseOverConversation);
+			//nodes.on('mouseout', onMouseOutConversation);
 			nodes.on('dblclick', onDblClickConversation);
 			nodes.call(force.drag);
 			force.on('tick', onTick);
@@ -329,6 +341,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            .attr("r", liveAttributes.conversationRadius)
 	            .attr('cx', 0)
 	            .attr('cy', 0)
+	            .attr('data-bordermode', liveAttributes.borderMode)
 	        parent
 	            .append("circle")
 	            .attr("class", "sub node")
@@ -390,14 +403,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var scaler;
 		var nodes, links;
 		var graph = { nodes: [], links: [] };
-		var mouseOverNode = null;
 		var tooltip;
-		var liveAttributes = new LiveAttributes();
+		var liveAttributes = new LiveAttributes(ABSTR);
 	}
 	
 	function Tooltip($tooltip) {
 		this.showTooltipAt$Node = function(node) {
-			console.log(node.offset(), $('svg').offset())
 			$tooltip.css('left', node.offset().left - $tooltip.outerWidth()/2);
 			$tooltip.css('top', node.offset().top - $tooltip.outerHeight());
 			$tooltip.show();
@@ -470,7 +481,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			d.mouseOver = true;
 			
 			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
-			console.log($node);
 			
 			tooltip.$().text(thoughtLiveAttributes.summary(d));
 			tooltip.showTooltipAt$Node($node);
@@ -552,7 +562,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var force;
 		var objects = { nodes: null, links: null };
 		var tooltip;
-		var liveAttributes = new LiveAttributes();
+		var liveAttributes = new LiveAttributes(ABSTR);
 		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
 	}
 	
@@ -560,7 +570,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		this.init = function() {}
 	}
 	
-	function LiveAttributes() {
+	function LiveAttributes(ABSTR) {
 		this.conversationRadius = function(d) {
 			return value(liveAttributes(d).conversationRadius, d);
 		}
@@ -579,6 +589,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.error = function(d) {
 			return d.error;
+		}
+		
+		this.borderMode = function(d) {
+			if(hashEquals(ABSTR.selectedConversation, d)) return BorderMode.Selected;
+			else if(hashEquals(ABSTR.mouseOverConversation, d) && !d.expanded) return BorderMode.MouseOver;
+			else return BorderMode.None;
 		}
 		
 		function liveAttributes(d) {
@@ -631,8 +647,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.borderMode = function(d) {
-			if(ABSTR.selectedThought && (d.hash == ABSTR.selectedThought.hash)) return BorderMode.Selected;
-			else if(d.mouseOver) return BorderMode.MouseOver;
+			if(hashEquals(ABSTR.selectedThought,d)) return BorderMode.Selected;
+			else if(d.mouseOver) return BorderMode.MouseOver; //TODO move mouseOver to ABSTR
 			else return BorderMode.None;
 		}
 		
@@ -684,6 +700,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				leave(d);
 			});
 		}
+	}
+	
+	function hashEquals(x, y) {
+		if(x == y) return true;
+		if(!x || !y) return false;
+		return x.hash == y.hash;
 	}
 	
 	return ConversationGraph;
