@@ -1,4 +1,4 @@
-define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilder, Db, Events, Webtext, DateTime) {
+define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function(PacBuilder, Db, Events, Webtext, DateTime, Scaler) {
 	function ConversationGraph() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -18,8 +18,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationSelected = new Events.EventImpl();
+		this.thoughtSelectionChanged = new Events.EventImpl();
 		
 		this.selectedConversation = null;
+		this.selectedThought = null;
 		
 		this.init = function() {
 			loadConversationList().done(ready);
@@ -34,12 +36,27 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		this.selectConversation = function(d) {
-			_this.selectedConversation = d;
-			_this.conversationSelected.raise(_this.selectedConversation);
+			if(_this.selectedConversation != d) {
+				_this.selectedConversation = null;
+				_this.selectThought(null);
+				_this.selectedConversation = d;
+				_this.conversationSelected.raise(_this.selectedConversation);
+			}
 		}
 		
-		this.clearConversationSelection = function() {
+		this.clearSelection = function() {
 			_this.selectConversation(null);
+			_this.selectThought(null);
+		}
+		
+		this.selectThought = function(d) {
+			if(_this.selectedThought != d) {
+				var old = _this.selectedThought;
+				_this.selectedThought = null;
+				_this.selectConversation(null);
+				_this.selectedThought = d;
+				_this.thoughtSelectionChanged.raise({ new: _this.selectedThought, old: old});
+			}
 		}
 		
 		this.getConversationList = function() {
@@ -62,7 +79,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			.then(function(model) {
 				d.loading = false;
 				d.error = false;
-				promise.resolve({ nodes: model.nodes })
+				for(var i=0; i<model.nodes.length; ++i) hashLookup[model.nodes[i].hash] = model.nodes[i];
+				var links = model.links.map(function(l) { return { 
+					source: hashLookup[l.source], 
+					target: hashLookup[l.target],
+					type: l.type,
+				} });
+				promise.resolve({ nodes: model.nodes, links: links })
 			})
 			.fail(function(error) {
 				d.loading = false;
@@ -74,6 +97,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		var conversationList = [];
+		var hashLookup = [];
 		var readyPromise = $.Deferred();
 	}
 	
@@ -81,6 +105,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var _this = this;
 		
 		this.init = function(html5node) {
+			scaler = new Scaler();
+			scaler.viewPortChanged.subscribe(onViewPortChanged);
 			ABSTR.conversationSelected.subscribe(onConversationSelected);
 			
 			initConstants();
@@ -93,9 +119,20 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			.then(initThoughtPresentation);
 		}
 		
+		function onViewPortChanged(args) {
+			console.log('onViewPortChanged');
+			if(args.transitionTime) setViewPort(args.translate.x, args.translate.y, args.zoom, true, args.transitionTime);
+			else setViewPort(args.translate.x, args.translate.y, args.zoom, false);
+		}
+		
 		this.destroy = function() {
 			style.remove();
 		}
+	    
+	    function setViewPort(tx, ty, zoom, isAnimation, transitionTime) {
+	    	var object = isAnimation ? svgContainer.transition().ease("cubic-out").duration(transitionTime) : svgContainer;
+	        object.attr("transform","translate(" + tx + ',' + ty + ") scale(" + zoom + ")");
+	    };
 		
 		function initThoughtPresentation() {
 			thoughtPresentation = new ConversationGraph_ThoughtPresentation(ABSTR, { container: svgContainer });
@@ -137,31 +174,22 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		function onMouseOverConversation(d) { //TODO: move to ABSTR?
 			if(mouseOverNode == d) return;
 			mouseOverNode = d;
+			
+			if(d.expanded) return;
 			var domNode = $(nodes.filter(function(d) { return d.hash == mouseOverNode.hash })[0]);
-			tooltip.text(d.title);
-			showTooltipAtJQueryNode(domNode);
+			tooltip.$().text(d.title);
+			tooltip.showTooltipAt$Node(domNode);
 		}
 		
 		function onMouseOutConversation(d) {
 			if(mouseOverNode == d) {
 				mouseOverNode = null;
-				hideTooltip();
+				tooltip.hideTooltip();
 			}
 		}
 		
-		function showTooltipAtJQueryNode(node) {
-			console.log(node.offset(), $('svg').offset())
-			tooltip.css('left', node.offset().left - tooltip.outerWidth()/2);
-			tooltip.css('top', node.offset().top - tooltip.outerHeight());
-			tooltip.show();
-		}
-		
-		function hideTooltip() {
-			tooltip.hide();
-		}
-		
 		function showSelectedConversationDetails(d) {
-			$('#right_bar_header #contentlabel').attr('mode', ConversationDetailsMode.Selected);
+			$('#right_bar_header #contentlabel').attr('mode', BorderMode.Selected);
 			$('#right_bar_header #contentlabel').text(d.title);
 			
 			$('#contbox').html('');
@@ -178,7 +206,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function clearConversationDetails() {
-			$('#right_bar_header #contentlabel').attr('mode', ConversationDetailsMode.None);
+			$('#right_bar_header #contentlabel').attr('mode', BorderMode.None);
 			$('#right_bar_header #contentlabel').text('');
 			$('#contbox').html('');
 		}
@@ -188,8 +216,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 				borderColor: []
 			};
 			
-			constants.borderColor[ConversationDetailsMode.Selected] = '#333';
-			constants.borderColor[ConversationDetailsMode.MouseOver] = '#c32222';
+			constants.borderColor[BorderMode.Selected] = '#333';
+			constants.borderColor[BorderMode.MouseOver] = '#c32222';
 		}
 		
 		function insertStyle() {
@@ -203,7 +231,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			.done(function(template) {
 				$(html5node).html(template);
 				
-				tooltip = $('#tooltip');
+				tooltip = new Tooltip($('#tooltip'));
 				
 				$(".right_bar").resizable({
 					handles: 'w, s',
@@ -224,10 +252,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			.attr('width', width)
 			.attr('height', height)
 			.attr('fill', 'white')
-			.on('click', ABSTR.clearConversationSelection);
+			.on('click', ABSTR.clearSelection)
 			
-			svgContainer = svg.append('svg:g')
-			.append('svg:g');
+			var tmp = svg.append('svg:g');
+			bg.call(d3.behavior.zoom().scaleExtent([1,8]).on('zoom', scaler.rescale));
+			svgContainer = tmp.append('svg:g');
 		}
 		
 		function initForce() {
@@ -271,7 +300,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 		
 		function updateGraph() {
-			//updateLinks();
+			//updateLinkAttributes();
 			updateNodeAttributes();
 			force.start();
 		}
@@ -358,6 +387,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var height = $(window).height();
 		var svg, svgContainer, bg;
 		var force;
+		var scaler;
 		var nodes, links;
 		var graph = { nodes: [], links: [] };
 		var mouseOverNode = null;
@@ -365,30 +395,52 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var liveAttributes = new LiveAttributes();
 	}
 	
+	function Tooltip($tooltip) {
+		this.showTooltipAt$Node = function(node) {
+			console.log(node.offset(), $('svg').offset())
+			$tooltip.css('left', node.offset().left - $tooltip.outerWidth()/2);
+			$tooltip.css('top', node.offset().top - $tooltip.outerHeight());
+			$tooltip.show();
+		}
+		
+		this.hideTooltip = function() {
+			$tooltip.hide();
+		}
+		
+		this.$ = function() {
+			return $tooltip;
+		}
+	}
+	
 	function ConversationGraph_ThoughtPresentation(ABSTR, svgData) {
 		var _this = this;
 		
 		this.init = function() {
+			ABSTR.thoughtSelectionChanged.subscribe(onThoughtSelectionChanged);
+			tooltip = new Tooltip($('#tooltip'));
+			
 			force = d3.layout.force()
 				.charge(-200)
 				.gravity(0)
-				.linkDistance(150)
+				.linkDistance(50)
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
 				.nodes(graph.nodes)
 				.links(graph.links);
 				
+			drawLinks();
 			drawNodes();
 				
 			force.on('tick', onTick);
-			force.start();
+			_this.startEvolution();
 		}
 		
 		this.removeConversationItems = function(conv) {
 			for(var i=0; i<graph.nodes.length; ++i) if(graph.nodes[i].conversation.hash == conv.hash) graph.nodes.splice(i--, 1);
 			for(var i=0; i<graph.links.length; ++i) if(graph.links[i].conversation.hash == conv.hash) graph.links.splice(i--, 1);
 			
+			drawLinks();
 			drawNodes();
 			_this.startEvolution();
 		}
@@ -397,6 +449,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			for(var i in nodes) { nodes[i].conversation = conv; graph.nodes.push(nodes[i]) }
 			for(var i in links) { links[i].conversation = conv; graph.links.push(links[i]) }
 			
+			drawLinks();
 			drawNodes();
 			_this.startEvolution();
 		}
@@ -405,14 +458,64 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			force.start();
 		}
 		
+		function onNodeClicked(d) {
+			ABSTR.selectThought(d);
+		}
+		
+		function onThoughtSelectionChanged(args) {
+			updateNodeAttributes();
+		}
+		
+		function onMouseEnter(d) {
+			d.mouseOver = true;
+			
+			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
+			console.log($node);
+			
+			tooltip.$().text(thoughtLiveAttributes.summary(d));
+			tooltip.showTooltipAt$Node($node);
+			
+			updateNodeAttributes();
+		}
+		
+		function onMouseLeave(d) {
+			d.mouseOver = false;
+			
+			tooltip.hideTooltip();
+			updateNodeAttributes();
+		}
+		
+		function drawLinks() {
+			if(objects.links) objects.links.remove();
+			objects.links = svgData.container.selectAll('.thought-link')
+				.data(graph.links)
+				.enter().append('line')
+				.attr('class', 'thought-link')
+			updateLinkAttributes();
+		}
+		
+		function updateLinkAttributes() {
+			objects.links
+				.style('stroke', thoughtLiveAttributes.linkColor)
+		}
+		
 		function drawNodes() {
 			if(objects.nodes) objects.nodes.remove();
 			objects.nodes = svgData.container.selectAll('.thought-node')
 				.data(graph.nodes)
 				.enter().append('circle')
+				.on('click', onNodeClicked)
+				.call(mouseEnterLeave(onMouseEnter, onMouseLeave))
+				.call(force.drag)
+			updateNodeAttributes();
+		}
+		
+		function updateNodeAttributes() {
+			objects.nodes
 				.attr('class', 'thought-node')
 				.attr('r', 15)
-				.call(force.drag);
+				.attr('data-bordermode', thoughtLiveAttributes.borderMode)
+				.style('fill', thoughtLiveAttributes.nodeColor)
 		}
 		
 		function onTick(e) {
@@ -421,6 +524,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 			objects.nodes
 				.attr('cx', function(d) { return d.x })
 				.attr('cy', function(d) { return d.y })
+			objects.links
+				.attr('x1', function(d) { return d.source.x })
+				.attr('y1', function(d) { return d.source.y })
+				.attr('x2', function(d) { return d.target.x })
+				.attr('y2', function(d) { return d.target.y })
 		}
 		
 		function gravity(alpha) {
@@ -443,7 +551,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		var graph = { nodes: [], links: [] };
 		var force;
 		var objects = { nodes: null, links: null };
+		var tooltip;
 		var liveAttributes = new LiveAttributes();
+		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
 	}
 	
 	function ConversationGraph_Control() {
@@ -495,7 +605,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	
 	function ExpandedConversationLiveAttributes() {
 		this.conversationRadius = function(d) {
-			return 30 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
+			return 40 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
 		}
 		
 		this.charge = function(d) {
@@ -511,10 +621,40 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 		}
 	}
 	
-	var ConversationDetailsMode = {
-		None: 0,
-		Selected: 1,
-		MouseOver: 2,
+	function ThoughtLiveAttributes(ABSTR) {
+		this.nodeColor = function(d) {
+			return nodeColor[d.type];
+		}
+		
+		this.linkColor = function(d) {
+			return linkColor[d.type];
+		}
+		
+		this.borderMode = function(d) {
+			if(ABSTR.selectedThought && (d.hash == ABSTR.selectedThought.hash)) return BorderMode.Selected;
+			else if(d.mouseOver) return BorderMode.MouseOver;
+			else return BorderMode.None;
+		}
+		
+		this.summary = function(d) {
+			//TODO: fontStyle -> zoomout:3740
+			if(d.contentsum) return d.contentsum;
+			else {
+				if(d.content.length > 60) return '[' + d.content.slice(0, 60) + '...]';
+				else return '[' + d.content + ']';
+			}
+		}
+		
+		//CODE        = ["#000000", "General", "Questio", "Proposa", "Info   "];
+		var nodeColor = ["#000000", "#f9c8a4", "#a2b0e7", "#e7a2dd", "#bae59a"];
+		//CODE        = ["#000000", "General", "Agreeme", "Disagre", "Consequ", "Alterna", "Equival"]; 
+		var linkColor = ["#000000", "#f9c8a4", "#7adc7c", "#e85959", "#b27de8", "#c87b37", "#ecaa41"];
+	}
+	
+	var BorderMode = {
+		None: 'normal',
+		Selected: 'selected',
+		MouseOver: 'mouseover',
 	};
 	
 	//converts from hex color to rgba color; TODO: duplicate -> visualisation-zoomout.js
@@ -528,6 +668,22 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime'], function(PacBuilde
 	        if (typeof opacity != 'undefined')  h.push(opacity);
 	
 	        return 'rgba('+h.join(',')+')';
+	}
+	
+	function mouseEnterLeave(enter, leave) {
+		var over = false;
+		return function(node) {
+			node.on('mouseover', function(d) {
+				if(over) return;
+				over = true;
+				enter(d);
+			});
+			node.on('mouseout', function(d) {
+				if(!over) return;
+				over = false;
+				leave(d);
+			});
+		}
 	}
 	
 	return ConversationGraph;

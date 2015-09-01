@@ -820,6 +820,25 @@ div.big_button:active{
 	display: none;
 }
 
+.thought-node[data-bordermode=normal] {
+	stroke-width: 1px;
+	stroke: #888;
+}
+
+.thought-node[data-bordermode=selected] {
+	stroke-width: 3px;
+	stroke: #333;
+}
+
+.thought-node[data-bordermode=mouseover] {
+	stroke-width: 3px;
+	stroke: #c32222;
+}
+
+.thought-link {
+	stroke-width: 5;
+}
+
 .ui-resizable { position: relative;}
 .ui-resizable-handle { position: absolute;font-size: 0.1px; z-index: -10; display: block; }
 
