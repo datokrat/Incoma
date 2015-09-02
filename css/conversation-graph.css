@@ -268,12 +268,17 @@ body {
   border-radius: 6px;
 }
 
-.right_bar_title[mode='1'] {
-	border-color: rgba(51, 51, 51, 0.7);
+.right_bar_title_main {
+  font-weight: bold;
 }
 
-.right_bar_title[mode='2'] {
-	border-color: #rgba(195, 34, 34, 0.7);
+.right_bar_title[data-bordermode='normal'] {
+	border-color: rgba(136, 136, 136, 0.7);
+}
+
+.right_bar_title[data-bordermode='selected'] {
+	/*border-color: rgba(195, 34, 34, 0.7); mouseover'*/
+	border-color: rgba(51, 51, 51, 0.7);
 }
 
 .divareacontent {

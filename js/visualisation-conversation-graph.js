@@ -64,7 +64,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				_this.selectedThought = null;
 				_this.selectConversation(null);
 				_this.selectedThought = d;
-				_this.thoughtSelectionChanged.raise({ new: _this.selectedThought, old: old});
+				_this.thoughtSelectionChanged.raise(_this.selectedThought);
 			}
 		}
 		
@@ -149,10 +149,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		function onConversationSelected(d) {
 			updateNodeAttributes();
-			if(d != null)
-				showSelectedConversationDetails(d);
-			else 
-				clearConversationDetails();
 		}
 		
 		function onDblClickConversation(d) {
@@ -199,25 +195,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			updateNodeAttributes();
 		}
 		
-		function showSelectedConversationDetails(d) {
-			$('#right_bar_header #contentlabel').attr('mode', BorderMode.Selected);
-			$('#right_bar_header #contentlabel').text(d.title);
-			
-			$('#contbox').html('');
-			appendLineToNode(d.thoughtnum + ' ' + Webtext.tx_thoughts, $('#contbox'));
-			appendLineToNode('created: ' + DateTime.timeAgo(d.creationtime), $('#contbox'));
-			appendLineToNode(Webtext.tx_activity +": " + DateTime.timeAgo(d.lasttime), $('#contbox'));
-			appendLineToNode(Webtext.tx_language + ": " + d.language, $('#contbox'));
-		}
-		
-		function appendLineToNode(text, node) {
-			var line = $('<span></span>'); line.text(text); line.html(line.html()+'<br />');
-			node.append(line);
-			return node;
-		}
-		
-		function clearConversationDetails() {
-			$('#right_bar_header #contentlabel').attr('mode', BorderMode.None);
+		function clearRightPanel() {
+			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.None);
 			$('#right_bar_header #contentlabel').text('');
 			$('#contbox').html('');
 		}
@@ -243,6 +222,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				$(html5node).html(template);
 				
 				tooltip = new Tooltip($('#tooltip'));
+				rightPanel = new RightPanel_Presentation(ABSTR);
+				rightPanel.init();
 				
 				$(".right_bar").resizable({
 					handles: 'w, s',
@@ -403,7 +384,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var scaler;
 		var nodes, links;
 		var graph = { nodes: [], links: [] };
-		var tooltip;
+		var tooltip, rightPanel;
 		var liveAttributes = new LiveAttributes(ABSTR);
 	}
 	
@@ -570,6 +551,65 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		this.init = function() {}
 	}
 	
+	function RightPanel_Presentation(ABSTR) { //TODO integrate
+		this.init = function() {
+			ABSTR.conversationSelected.subscribe(onConversationSelected);
+			ABSTR.thoughtSelectionChanged.subscribe(onThoughtSelected);
+			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
+		}
+		
+		function onConversationSelected(d) {
+			clear();
+			if(d) {
+				onSomethingSelected();
+				console.log('selected', d);
+				$('#right_bar_header #contentlabel .right_bar_title_main').text(d.title);
+			
+				$('#contbox').html('');
+				appendLineToContent(d.thoughtnum + ' ' + Webtext.tx_thoughts);
+				appendLineToContent('created: ' + DateTime.timeAgo(d.creationtime));
+				appendLineToContent(Webtext.tx_activity +": " + DateTime.timeAgo(d.lasttime));
+				appendLineToContent(Webtext.tx_language + ": " + d.language);
+			}
+		}
+		
+		function onThoughtSelected(d) {
+			clear();
+			if(d) {
+				onSomethingSelected();
+				console.log('selected', d);
+				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
+				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
+				//$('#right_bar_header #contentlabel .right_bar_title_details').text(d.title);
+			
+				$('#contbox').html('');
+				appendLineToContent(URLlinks(nl2br(d.content)));
+			}
+		}
+		
+		function onSomethingSelected() {
+			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.Selected);
+		}
+		
+		function clear() {
+			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
+			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.None);
+			$('#right_bar_header #contentlabel *').html('');
+			$('#contbox').html('');
+		}
+		
+		function appendLineToContent(text) {
+			var line = $('<span></span>'); line.text(text); line.html(line.html()+'<br />');
+			appendNodeToContent(line);
+		}
+		
+		function appendNodeToContent($node) {
+			$('#contbox').append($node);
+		}
+		
+		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
+	}
+	
 	function LiveAttributes(ABSTR) {
 		this.conversationRadius = function(d) {
 			return value(liveAttributes(d).conversationRadius, d);
@@ -625,7 +665,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.charge = function(d) {
-			return -1000 * Math.sqrt(d.thoughtnum) - 500;
+			return -500 * d.thoughtnum - 500;
 		}
 		
 		this.conversationLoading = function(d) {
@@ -673,6 +713,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		MouseOver: 'mouseover',
 	};
 	
+	var ThoughtTypes = {
+		General: 1,
+		Question: 2,
+		Proposal: 3,
+		Info: 4,
+	};
+	var ThoughtTypeAttributes = {};
+	ThoughtTypeAttributes[ThoughtTypes.General] = { name: Webtext.tx_general };
+	ThoughtTypeAttributes[ThoughtTypes.Question] = { name: Webtext.tx_question };
+	ThoughtTypeAttributes[ThoughtTypes.Proposal] = { name: Webtext.tx_proposal };
+	ThoughtTypeAttributes[ThoughtTypes.Info] = { name: Webtext.tx_info };
+	
 	//converts from hex color to rgba color; TODO: duplicate -> visualisation-zoomout.js
 	function hex2rgb(hex, opacity) {
 	        var h=hex.replace('#', '');
@@ -706,6 +758,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		if(x == y) return true;
 		if(!x || !y) return false;
 		return x.hash == y.hash;
+	}
+	
+	//replace multiple URLs inside a string in html links
+	function URLlinks(text) {
+	    var exp = /(\b(https?|ftp|file):\/\/[-A-Z0-9é-ú+&@#\/%?=~_|!:,.;]*[-A-Z0-9é-ú+&@#\/%=~_|])/ig;
+	    return text.replace(exp,"<a href='$1' target='_blank'>$1</a>");
+	}
+	
+	//replace line breaks with <br> html tags
+	function nl2br (str, is_xhtml) {   
+		var breakTag = (is_xhtml || typeof is_xhtml === 'undefined') ? '<br />' : '<br>';    
+		return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1'+ breakTag +'$2');
 	}
 	
 	return ConversationGraph;
