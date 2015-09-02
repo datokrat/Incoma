@@ -33,26 +33,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			readyPromise.resolve();
 		}
 		
-		this.selectConversation = function(d) {
-			_this.selection.select({ type: SelectionTypes.Conversation, item: d });
-		}
-		
-		this.selectThought = function(d) {
-			_this.selection.select({ type: SelectionTypes.Thought, item: d });
-		}
-		
-		this.mouseEnterConversation = function(d) {
-			_this.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
-		}
-		
-		this.mouseEnterThought = function(d) {
-			_this.mouseOver.select({ type: SelectionTypes.Thought, item: d });
-		}
-		
-		this.mouseEnterThoughtLink = function(d) {
-			_this.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
-		}
-		
 		this.getConversationList = function() {
 			return conversationList;
 		}
@@ -191,7 +171,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function onDblClickConversation(d) {
 				d.expanded = !d.expanded;
 				d.loading = d.expanded ? true : false;
-				ABSTR.mouseEnterConversation(null);
+				ABSTR.mouseOver.clear();
 				updateGraph();
 				
 				if(d.expanded) {
@@ -215,7 +195,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseEnterConversation(d) {
-			ABSTR.mouseEnterConversation(d);
+			ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
 			
 			if(d.expanded) return;
 			var domNode = $(nodes.filter(function(d2) { return d2.hash == d.hash })[0]);
@@ -224,7 +204,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseLeaveConversation(d) {
-			ABSTR.mouseEnterConversation(null);
+			ABSTR.mouseOver.clear();
 			
 			tooltip.hideTooltip();
 		}
@@ -494,7 +474,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onNodeClicked(d) {
-			//ABSTR.selectThought(d);
 			ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
 		}
 		
@@ -508,7 +487,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseEnter(d) {
-			ABSTR.mouseEnterThought(d);
+			ABSTR.mouseOver.select({ type: SelectionTypes.Thought, item: d });
 			updateNodeAttributes();
 			
 			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
@@ -518,18 +497,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseLeave(d) {
-			ABSTR.mouseEnterThought(null);
+			ABSTR.mouseOver.clear();
 			
 			tooltip.hideTooltip();
 			updateNodeAttributes();
 		}
 		
 		function onMouseEnterLink(d) {
-			ABSTR.mouseEnterThoughtLink(d);
+			ABSTR.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
 		}
 		
 		function onMouseLeaveLink(d) {
-			ABSTR.mouseEnterThoughtLink(null);
+			ABSTR.mouseOver.clear();
 		}
 		
 		function onMouseOverSelectionChanged(args) {
