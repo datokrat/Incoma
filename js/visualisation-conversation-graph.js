@@ -473,6 +473,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			force.start();
 		}
 		
+		function onLinkClicked(d) {
+			ABSTR.selection.select({ type: SelectionTypes.ThoughtLink, item: d });
+		}
+		
 		function onNodeClicked(d) {
 			ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
 		}
@@ -480,10 +484,17 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function onSelectionChanged(args) {
 			if(args.value.type == SelectionTypes.Thought) onThoughtSelectionChanged(args.value.item);
 			else if(args.oldValue.type == SelectionTypes.Thought) onThoughtSelectionChanged(null);
+			
+			if(args.value.type == SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(null);
 		}
 		
 		function onThoughtSelectionChanged(d) {
 			updateNodeAttributes();
+		}
+		
+		function onThoughtLinkSelectionChanged(d) {
+			updateLinkBorder();
 		}
 		
 		function onMouseEnter(d) {
@@ -517,25 +528,36 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseOverLinkChanged(d) {
-			updateLinkBorder(d);
+			updateLinkBorder();
 		}
 		
 		function updateLinkBorder() {
-			var d = ABSTR.mouseOver.item();
-			if(ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && d) {
-				objects.mouseOverLinkBorder
-					.attr('x1', d.source.x)
-					.attr('y1', d.source.y)
-					.attr('x2', d.target.x)
-					.attr('y2', d.target.y)
-			}
-			else {
-				objects.mouseOverLinkBorder
+			var over = ABSTR.mouseOver.item();
+			var sel = ABSTR.selection.item();
+			var active = [];
+			var inactive = [];
+			if(ABSTR.selection.type() == SelectionTypes.ThoughtLink && sel)
+				active.push({ linkBorder: objects.selectedLinkBorder, d: sel })
+			else inactive.push(objects.selectedLinkBorder);
+			if(ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
+				active.push({ linkBorder: objects.mouseOverLinkBorder, d: over });
+			else inactive.push(objects.mouseOverLinkBorder);
+			
+			
+			active.forEach(function(item) {
+				item.linkBorder
+					.attr('x1', item.d.source.x)
+					.attr('y1', item.d.source.y)
+					.attr('x2', item.d.target.x)
+					.attr('y2', item.d.target.y)
+			})
+			inactive.forEach(function(linkBorder) {
+				linkBorder
 					.attr('x1', 0)
 					.attr('y1', 0)
 					.attr('x2', 0)
 					.attr('y2', 0)
-			}
+			});
 		}
 		
 		function drawLinks() {
@@ -553,6 +575,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.data(graph.links)
 				.enter().append('line')
 				.attr('class', 'thought-link')
+				.on('click', onLinkClicked)
 				.call(mouseEnterLeave(onMouseEnterLink, onMouseLeaveLink))
 			objects.links
 				.filter(thoughtLiveAttributes.replyLink)
