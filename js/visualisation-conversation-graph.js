@@ -154,6 +154,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function onDblClickConversation(d) {
 				d.expanded = !d.expanded;
 				d.loading = d.expanded ? true : false;
+				ABSTR.mouseEnterConversation(null);
 				updateGraph();
 				
 				if(d.expanded) {
@@ -414,7 +415,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			force = d3.layout.force()
 				.charge(-200)
 				.gravity(0)
-				.linkDistance(50)
+				.linkDistance(75)
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
@@ -525,15 +526,15 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function gravity(alpha) {
 			for(var i in graph.nodes) {
 				var d = graph.nodes[i];
-				var factor = alpha*0.2;
+				var factor = 0.1;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
 				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
 					dist = Math.sqrt(dist);
-				if(dist >= conversationRadius*0.95) {
-					factor += (dist-conversationRadius*0.95)/dist/2;
+				if(dist >= conversationRadius) {
+					factor += (dist-conversationRadius)/dist/2;
 				}
-				d.x += (d.conversation.x - d.x)*factor;
-				d.y += (d.conversation.y - d.y)*factor;
+				d.x += (d.conversation.x - d.x)*factor*alpha;
+				d.y += (d.conversation.y - d.y)*factor*alpha;
 			}
 		}
 		
@@ -661,11 +662,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	
 	function ExpandedConversationLiveAttributes() {
 		this.conversationRadius = function(d) {
-			return 40 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
+			return 50 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
 		}
 		
 		this.charge = function(d) {
-			return -500 * d.thoughtnum - 500;
+			return -1500 * d.thoughtnum - 200;
 		}
 		
 		this.conversationLoading = function(d) {

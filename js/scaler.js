@@ -45,7 +45,6 @@ define(['event'], function(Events) {
 	
 	    
 	    this.rescale = function() {
-			console.log('rescale', d3.event.translate);
 	        THIS.trans=d3.event.translate;
 	        THIS.scale=d3.event.scale;
 	        
