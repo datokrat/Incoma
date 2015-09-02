@@ -18,15 +18,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
 		
-		this.mouseOverConversationChanged = new Events.EventImpl();
-		this.mouseOverThoughtChanged = new Events.EventImpl();
-		this.mouseOverThoughtLinkChanged = new Events.EventImpl();
-		
 		this.selection = new Selection();
-		
-		this.mouseOverConversation = null;
-		this.mouseOverThought = null;
-		this.mouseOverThoughtLink = null;
+		this.mouseOver = new Selection();
 		
 		this.init = function() {
 			loadConversationList().done(ready);
@@ -49,24 +42,15 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.mouseEnterConversation = function(d) {
-			if(_this.mouseOverConversation != d) {
-				_this.mouseOverConversation = d;
-				_this.mouseOverConversationChanged.raise(_this.mouseOverConversation);
-			}
+			_this.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
 		}
 		
 		this.mouseEnterThought = function(d) {
-			if(_this.mouseOverThought != d) {
-				_this.mouseOverThought = d;
-				_this.mouseOverThoughtChanged.raise(_this.mouseOverThought);
-			}
+			_this.mouseOver.select({ type: SelectionTypes.Thought, item: d });
 		}
 		
 		this.mouseEnterThoughtLink = function(d) {
-			if(_this.mouseOverThoughtLink != d) {
-				_this.mouseOverThoughtLink = d;
-				_this.mouseOverThoughtLinkChanged.raise(_this.mouseOverThoughtLink);
-			}
+			_this.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
 		}
 		
 		this.getConversationList = function() {
@@ -164,7 +148,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			scaler = new Scaler();
 			scaler.viewPortChanged.subscribe(onViewPortChanged);
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOverConversationChanged.subscribe(onMouseOverConversationChanged);
+			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
 			initConstants();
 			
@@ -243,6 +227,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			ABSTR.mouseEnterConversation(null);
 			
 			tooltip.hideTooltip();
+		}
+		
+		function onMouseOverSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.Conversation) onMouseOverConversationChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.Conversation) onMouseOverConversationChanged(null);
 		}
 		
 		function onMouseOverConversationChanged(d) {
@@ -336,11 +325,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            
 	        appendConversationSymbolTo(nodes);
 			
-			//nodes.on('click', ABSTR.selectConversation);
 			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
 			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
-			//nodes.on('mouseover', onMouseOverConversation);
-			//nodes.on('mouseout', onMouseOutConversation);
 			nodes.on('dblclick', onDblClickConversation);
 			nodes.call(force.drag);
 			force.on('tick', onTick);
@@ -464,7 +450,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.init = function() {
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOverThoughtLinkChanged.subscribe(onMouseOverLinkChanged);
+			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			tooltip = new Tooltip($('#tooltip'));
 			
 			force = d3.layout.force()
@@ -546,13 +532,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			ABSTR.mouseEnterThoughtLink(null);
 		}
 		
+		function onMouseOverSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.values.item);
+			else if(args.oldValue.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(null);
+		}
+		
 		function onMouseOverLinkChanged(d) {
 			updateLinkBorder(d);
 		}
 		
 		function updateLinkBorder() {
-			var d = ABSTR.mouseOverThoughtLink;
-			if(d) {
+			var d = ABSTR.mouseOver.item();
+			if(ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && d) {
 				objects.mouseOverLinkBorder
 					.attr('x1', d.source.x)
 					.attr('y1', d.source.y)
@@ -705,10 +696,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		this.init = function() {}
 	}
 	
-	function RightPanel_Presentation(ABSTR) { //TODO integrate
+	function RightPanel_Presentation(ABSTR) {
 		this.init = function() {
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOverThoughtChanged.subscribe(onMouseOverThoughtChanged);
+			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
 		}
 		
@@ -742,6 +733,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				$('#contbox').html('');
 				appendLineToContent(URLlinks(nl2br(d.content)));
 			}
+		}
+		
+		function onMouseOverSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.Thought) onMouseOverThoughtChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.Thought) onMouseOverThoughtChanged(null);
 		}
 		
 		function onMouseOverThoughtChanged(d) {
@@ -811,7 +807,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.borderMode = function(d) {
 			if(hashEquals(ABSTR.selection.item(), d)) return BorderMode.Selected;
-			else if(hashEquals(ABSTR.mouseOverConversation, d) && !d.expanded) return BorderMode.MouseOver;
+			else if(hashEquals(ABSTR.mouseOver.item(), d) && !d.expanded) return BorderMode.MouseOver;
 			else return BorderMode.None;
 		}
 		
@@ -870,7 +866,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.borderMode = function(d) {
 			if(hashEquals(ABSTR.selection.item(),d)) return BorderMode.Selected;
-			else if(hashEquals(ABSTR.mouseOverThought, d)) return BorderMode.MouseOver; //TODO move mouseOver to ABSTR
+			else if(hashEquals(ABSTR.mouseOver.item(), d)) return BorderMode.MouseOver;
 			else return BorderMode.None;
 		}
 		
