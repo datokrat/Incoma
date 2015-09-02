@@ -533,7 +533,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.values.item);
+			if(args.value.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.value.item);
 			else if(args.oldValue.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(null);
 		}
 		
