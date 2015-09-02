@@ -847,6 +847,10 @@ div.big_button:active{
 	stroke-width: 5;
 }
 
+.thought-overlink {
+	stroke-width: 8.5;
+}
+
 .ui-resizable { position: relative;}
 .ui-resizable-handle { position: absolute;font-size: 0.1px; z-index: -10; display: block; }
 

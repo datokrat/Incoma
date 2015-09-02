@@ -17,15 +17,16 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	function ConversationGraph_Abstraction() {
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
-		this.conversationSelected = new Events.EventImpl();
-		this.thoughtSelectionChanged = new Events.EventImpl();
+		
 		this.mouseOverConversationChanged = new Events.EventImpl();
 		this.mouseOverThoughtChanged = new Events.EventImpl();
+		this.mouseOverThoughtLinkChanged = new Events.EventImpl();
 		
-		this.selectedConversation = null;
-		this.selectedThought = null;
+		this.selection = new Selection();
+		
 		this.mouseOverConversation = null;
-		this.mouseOverThought = null; //TODO use this
+		this.mouseOverThought = null;
+		this.mouseOverThoughtLink = null;
 		
 		this.init = function() {
 			loadConversationList().done(ready);
@@ -40,27 +41,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.selectConversation = function(d) {
-			if(_this.selectedConversation != d) {
-				_this.selectedConversation = null;
-				_this.selectThought(null);
-				_this.selectedConversation = d;
-				_this.conversationSelected.raise(_this.selectedConversation);
-			}
+			_this.selection.select({ type: SelectionTypes.Conversation, item: d });
 		}
 		
 		this.selectThought = function(d) {
-			if(_this.selectedThought != d) {
-				var old = _this.selectedThought;
-				_this.selectedThought = null;
-				_this.selectConversation(null);
-				_this.selectedThought = d;
-				_this.thoughtSelectionChanged.raise(_this.selectedThought);
-			}
-		}
-		
-		this.clearSelection = function() {
-			_this.selectConversation(null);
-			_this.selectThought(null);
+			_this.selection.select({ type: SelectionTypes.Thought, item: d });
 		}
 		
 		this.mouseEnterConversation = function(d) {
@@ -74,6 +59,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			if(_this.mouseOverThought != d) {
 				_this.mouseOverThought = d;
 				_this.mouseOverThoughtChanged.raise(_this.mouseOverThought);
+			}
+		}
+		
+		this.mouseEnterThoughtLink = function(d) {
+			if(_this.mouseOverThoughtLink != d) {
+				_this.mouseOverThoughtLink = d;
+				_this.mouseOverThoughtLinkChanged.raise(_this.mouseOverThoughtLink);
 			}
 		}
 		
@@ -102,6 +94,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 					source: hashLookup[l.source], 
 					target: hashLookup[l.target],
 					type: l.type,
+					direct: l.direct,
 				} });
 				promise.resolve({ nodes: model.nodes, links: links })
 			})
@@ -118,13 +111,59 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var readyPromise = $.Deferred();
 	}
 	
+	function Selection() {
+		var _this = this;
+		this.selectionChanged = new Events.EventImpl();
+		
+		this.select = function(_sel) {
+			if(!Selection.equals(sel, _sel)) {
+				var old = Selection.clone(sel);
+				Selection.clone(_sel, sel);
+				_this.selectionChanged.raise({ oldValue: old, value: sel });
+			}
+		}
+		
+		this.clear = function() {
+			_this.select({ type: null, item: null });
+		}
+		
+		this.selectTypeFn = function(type) {
+			return function(item) { return _this.select({ item: item, type: type }) };
+		}
+		
+		this.type = function() {
+			return sel.type;
+		}
+		
+		this.item = function() {
+			return sel.item;
+		}
+		
+		var sel = { item: null, type: null };
+	}
+	Selection.clone = function(from, to) {
+		to = to || {};
+		to.type = from.type;
+		to.item = from.item;
+		return to;
+	}
+	Selection.equals = function(x, y) {
+		return x.type == y.type && x.item == y.item;
+	}
+	
+	var SelectionTypes = {
+		Conversation: 0,
+		Thought: 1,
+		ThoughtLink: 2,
+	}
+	
 	function ConversationGraph_Presentation(ABSTR) {
 		var _this = this;
 		
 		this.init = function(html5node) {
 			scaler = new Scaler();
 			scaler.viewPortChanged.subscribe(onViewPortChanged);
-			ABSTR.conversationSelected.subscribe(onConversationSelected);
+			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOverConversationChanged.subscribe(onMouseOverConversationChanged);
 			
 			initConstants();
@@ -154,6 +193,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function initThoughtPresentation() {
 			thoughtPresentation = new ConversationGraph_ThoughtPresentation(ABSTR, { container: svgContainer });
 			thoughtPresentation.init();
+		}
+		
+		function onSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.Conversation) onConversationSelected(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.Conversation) onConversationSelected(null);
 		}
 		
 		function onConversationSelected(d) {
@@ -254,7 +298,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			.attr('width', width)
 			.attr('height', height)
 			.attr('fill', 'white')
-			.on('click', ABSTR.clearSelection)
+			.on('click', ABSTR.selection.clear)
 			
 			var tmp = svg.append('svg:g');
 			bg.call(d3.behavior.zoom().scaleExtent([1,8]).on('zoom', scaler.rescale));
@@ -292,7 +336,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            
 	        appendConversationSymbolTo(nodes);
 			
-			nodes.on('click', ABSTR.selectConversation);
+			//nodes.on('click', ABSTR.selectConversation);
+			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
 			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
 			//nodes.on('mouseover', onMouseOverConversation);
 			//nodes.on('mouseout', onMouseOutConversation);
@@ -418,7 +463,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var _this = this;
 		
 		this.init = function() {
-			ABSTR.thoughtSelectionChanged.subscribe(onThoughtSelectionChanged);
+			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
+			ABSTR.mouseOverThoughtLinkChanged.subscribe(onMouseOverLinkChanged);
 			tooltip = new Tooltip($('#tooltip'));
 			
 			force = d3.layout.force()
@@ -432,6 +478,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.links(graph.links);
 				
 			drawLinks();
+			drawLinkArrows();
 			drawNodes();
 				
 			force.on('tick', onTick);
@@ -461,22 +508,27 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onNodeClicked(d) {
-			ABSTR.selectThought(d);
+			//ABSTR.selectThought(d);
+			ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
 		}
 		
-		function onThoughtSelectionChanged(args) {
+		function onSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.Thought) onThoughtSelectionChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.Thought) onThoughtSelectionChanged(null);
+		}
+		
+		function onThoughtSelectionChanged(d) {
 			updateNodeAttributes();
 		}
 		
 		function onMouseEnter(d) {
 			ABSTR.mouseEnterThought(d);
+			updateNodeAttributes();
 			
 			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
 			
 			tooltip.$().text(thoughtLiveAttributes.summary(d));
 			tooltip.showTooltipAt$Node($node);
-			
-			updateNodeAttributes();
 		}
 		
 		function onMouseLeave(d) {
@@ -486,13 +538,103 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			updateNodeAttributes();
 		}
 		
+		function onMouseEnterLink(d) {
+			ABSTR.mouseEnterThoughtLink(d);
+		}
+		
+		function onMouseLeaveLink(d) {
+			ABSTR.mouseEnterThoughtLink(null);
+		}
+		
+		function onMouseOverLinkChanged(d) {
+			updateLinkBorder(d);
+		}
+		
+		function updateLinkBorder() {
+			var d = ABSTR.mouseOverThoughtLink;
+			if(d) {
+				objects.mouseOverLinkBorder
+					.attr('x1', d.source.x)
+					.attr('y1', d.source.y)
+					.attr('x2', d.target.x)
+					.attr('y2', d.target.y)
+			}
+			else {
+				objects.mouseOverLinkBorder
+					.attr('x1', 0)
+					.attr('y1', 0)
+					.attr('x2', 0)
+					.attr('y2', 0)
+			}
+		}
+		
 		function drawLinks() {
+			if(objects.mouseOverLinkBorder) objects.mouseOverLinkBorder.remove();
+			objects.mouseOverLinkBorder = svgData.container.append('line')
+				.attr('class', 'thought-overlink')
+				.style('stroke', '#c32222') //TODO: unify borderColors
+			if(objects.selectedLinkBorder) objects.selectedLinkBorder.remove();
+			objects.selectedLinkBorder = svgData.container.append('line')
+				.attr('class', 'thought-selectedlink')
+				.style('stroke', '#333') //TODO: unify borderColors
+			
 			if(objects.links) objects.links.remove();
 			objects.links = svgData.container.selectAll('.thought-link')
 				.data(graph.links)
 				.enter().append('line')
 				.attr('class', 'thought-link')
+				.call(mouseEnterLeave(onMouseEnterLink, onMouseLeaveLink))
+			objects.links
+				.filter(thoughtLiveAttributes.replyLink)
+				.attr('marker-start', 'url(#thought-arrow)')
+			objects.links
+				.filter(notFn(thoughtLiveAttributes.replyLink))
+				.attr('marker-start', 'url(#thought-invertedarrow)')
+				
 			updateLinkAttributes();
+		}
+		
+		function drawLinkArrows() {
+			if(objects.linkArrows) objects.linkArrows.remove();
+			if(objects.invertedLinkArrows) objects.invertedLinkArrows.remove();
+			objects.linkArrows = svgData.container.append("defs").append("marker")
+				.attr("id", "thought-arrow")
+				.attr("class", "thought-arrowmarker")
+				// Displacement to put the arrow in the middle of the link
+				.attr("refX", -3)
+				.attr("refY", 0.45)
+				.attr("fill", 'rgba(0,0,0,0.75)')
+				.attr("stroke", 'rgba(0,0,0,0.75)')
+				.attr("stroke-linecap", "round")
+				.attr("stroke-linejoin", "round")
+				.attr("stroke-width", 0.1)
+				.attr("stroke-opacity", 1.0)
+				.attr("fill-opacity", 1.0)
+				.attr("markerWidth", 5)
+				.attr("markerHeight", 5)
+				.attr("orient", "auto")
+				.append("path")
+				.attr("d", " M 4 0 Q 0 0.45 4 0.9 Q 0.8 0.45 4 0");
+				  // This is the form of the arrow. It starts in the point (y,x)=(4,0), it draws a quadratic Bézier curve to (4,0.9) with control point (0,0.45)
+				  // and then another Bézier back to (4,0) with (0.8,0.45) as the control point
+				  
+			objects.invertedLinkArrows = svgData.container.append("defs").append("marker")
+				.attr("id", "thought-invertedarrow")
+				.attr("class", "thought-arrowmarker")
+				.attr("refX", -6) 
+				.attr("refY", 0.45)
+				.attr("fill", 'rgba(0,0,0,0.75)')
+				.attr("stroke", 'rgba(0,0,0,0.75)')
+				.attr("stroke-linecap", "round")
+				.attr("stroke-linejoin", "round")
+				.attr("stroke-width", 0.1)
+				.attr("stroke-opacity", 1.0)
+				.attr("fill-opacity", 1.0)
+				.attr("markerWidth", 5)
+				.attr("markerHeight", 5)
+				.attr("orient", "auto")
+				.append("path")
+				.attr("d", " M 0 0 Q 4 0.45 0 0.9 Q 3.2 0.45 0 0");
 		}
 		
 		function updateLinkAttributes() {
@@ -530,6 +672,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.attr('y1', function(d) { return d.source.y })
 				.attr('x2', function(d) { return d.target.x })
 				.attr('y2', function(d) { return d.target.y })
+				
+			updateLinkBorder();
 		}
 		
 		function gravity(alpha) {
@@ -563,17 +707,21 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	
 	function RightPanel_Presentation(ABSTR) { //TODO integrate
 		this.init = function() {
-			ABSTR.conversationSelected.subscribe(onConversationSelected);
-			ABSTR.thoughtSelectionChanged.subscribe(onThoughtSelected);
+			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOverThoughtChanged.subscribe(onMouseOverThoughtChanged);
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
+		}
+		
+		function onSelectionChanged(args) {
+			if(args.value.type == SelectionTypes.Conversation) onConversationSelected(args.value.item);
+			else if(args.value.type == SelectionTypes.Thought) onThoughtSelected(args.value.item);
+			else if(args.value.type == null) clear();
 		}
 		
 		function onConversationSelected(d) {
 			clear();
 			if(d) {
 				onSomethingSelected();
-				console.log('selected', d);
 				$('#right_bar_header #contentlabel .right_bar_title_main').text(d.title);
 			
 				$('#contbox').html('');
@@ -613,8 +761,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		function showSelected() {
 			clear();
-			if(ABSTR.selectedConversation) onConversationSelected(ABSTR.selectedConversation);
-			else if(ABSTR.selectedThought) onThoughtSelected(ABSTR.selectedThought);
+			if(ABSTR.selection.type() == SelectionTypes.Conversation) onConversationSelected(ABSTR.selection.item());
+			else if(ABSTR.selection.type() == SelectionTypes.Thought) onThoughtSelected(ABSTR.selection.item());
 		}
 		
 		function onSomethingSelected() {
@@ -662,7 +810,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selectedConversation, d)) return BorderMode.Selected;
+			if(hashEquals(ABSTR.selection.item(), d)) return BorderMode.Selected;
 			else if(hashEquals(ABSTR.mouseOverConversation, d) && !d.expanded) return BorderMode.MouseOver;
 			else return BorderMode.None;
 		}
@@ -716,8 +864,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			return linkColor[d.type];
 		}
 		
+		this.replyLink = function(d) {
+			return d.direct == 0;
+		}
+		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selectedThought,d)) return BorderMode.Selected;
+			if(hashEquals(ABSTR.selection.item(),d)) return BorderMode.Selected;
 			else if(hashEquals(ABSTR.mouseOverThought, d)) return BorderMode.MouseOver; //TODO move mouseOver to ABSTR
 			else return BorderMode.None;
 		}
@@ -800,6 +952,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	function nl2br (str, is_xhtml) {   
 		var breakTag = (is_xhtml || typeof is_xhtml === 'undefined') ? '<br />' : '<br>';    
 		return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1'+ breakTag +'$2');
+	}
+	
+	function notFn(fn) {
+		return function() { return !fn.apply(this, arguments) };
 	}
 	
 	return ConversationGraph;
