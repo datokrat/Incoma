@@ -18,12 +18,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationSelected = new Events.EventImpl();
-		this.mouseOverConversationChanged = new Events.EventImpl();
 		this.thoughtSelectionChanged = new Events.EventImpl();
+		this.mouseOverConversationChanged = new Events.EventImpl();
+		this.mouseOverThoughtChanged = new Events.EventImpl();
 		
 		this.selectedConversation = null;
 		this.selectedThought = null;
 		this.mouseOverConversation = null;
+		this.mouseOverThought = null; //TODO use this
 		
 		this.init = function() {
 			loadConversationList().done(ready);
@@ -46,10 +48,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			}
 		}
 		
-		this.mouseEnterConversation = function(d) {
-			if(_this.mouseOverConversation != d) {
-				_this.mouseOverConversation = d;
-				_this.mouseOverConversationChanged.raise(_this.mouseOverConversation);
+		this.selectThought = function(d) {
+			if(_this.selectedThought != d) {
+				var old = _this.selectedThought;
+				_this.selectedThought = null;
+				_this.selectConversation(null);
+				_this.selectedThought = d;
+				_this.thoughtSelectionChanged.raise(_this.selectedThought);
 			}
 		}
 		
@@ -58,13 +63,17 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			_this.selectThought(null);
 		}
 		
-		this.selectThought = function(d) {
-			if(_this.selectedThought != d) {
-				var old = _this.selectedThought;
-				_this.selectedThought = null;
-				_this.selectConversation(null);
-				_this.selectedThought = d;
-				_this.thoughtSelectionChanged.raise(_this.selectedThought);
+		this.mouseEnterConversation = function(d) {
+			if(_this.mouseOverConversation != d) {
+				_this.mouseOverConversation = d;
+				_this.mouseOverConversationChanged.raise(_this.mouseOverConversation);
+			}
+		}
+		
+		this.mouseEnterThought = function(d) {
+			if(_this.mouseOverThought != d) {
+				_this.mouseOverThought = d;
+				_this.mouseOverThoughtChanged.raise(_this.mouseOverThought);
 			}
 		}
 		
@@ -460,7 +469,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseEnter(d) {
-			d.mouseOver = true;
+			ABSTR.mouseEnterThought(d);
 			
 			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
 			
@@ -471,7 +480,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseLeave(d) {
-			d.mouseOver = false;
+			ABSTR.mouseEnterThought(null);
 			
 			tooltip.hideTooltip();
 			updateNodeAttributes();
@@ -556,6 +565,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		this.init = function() {
 			ABSTR.conversationSelected.subscribe(onConversationSelected);
 			ABSTR.thoughtSelectionChanged.subscribe(onThoughtSelected);
+			ABSTR.mouseOverThoughtChanged.subscribe(onMouseOverThoughtChanged);
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
 		}
 		
@@ -578,14 +588,33 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			clear();
 			if(d) {
 				onSomethingSelected();
-				console.log('selected', d);
 				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
 				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
-				//$('#right_bar_header #contentlabel .right_bar_title_details').text(d.title);
 			
 				$('#contbox').html('');
 				appendLineToContent(URLlinks(nl2br(d.content)));
 			}
+		}
+		
+		function onMouseOverThoughtChanged(d) {
+			if(d) {
+				clear();
+				$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.MouseOver);
+				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
+				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
+			
+				$('#contbox').html('');
+				appendLineToContent(URLlinks(nl2br(d.content)));
+			}
+			else {
+				showSelected();
+			}
+		}
+		
+		function showSelected() {
+			clear();
+			if(ABSTR.selectedConversation) onConversationSelected(ABSTR.selectedConversation);
+			else if(ABSTR.selectedThought) onThoughtSelected(ABSTR.selectedThought);
 		}
 		
 		function onSomethingSelected() {
@@ -689,7 +718,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.borderMode = function(d) {
 			if(hashEquals(ABSTR.selectedThought,d)) return BorderMode.Selected;
-			else if(d.mouseOver) return BorderMode.MouseOver; //TODO move mouseOver to ABSTR
+			else if(hashEquals(ABSTR.mouseOverThought, d)) return BorderMode.MouseOver; //TODO move mouseOver to ABSTR
 			else return BorderMode.None;
 		}
 		

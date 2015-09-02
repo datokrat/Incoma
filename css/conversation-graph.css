@@ -277,8 +277,11 @@ body {
 }
 
 .right_bar_title[data-bordermode='selected'] {
-	/*border-color: rgba(195, 34, 34, 0.7); mouseover'*/
 	border-color: rgba(51, 51, 51, 0.7);
+}
+
+.right_bar_title[data-bordermode='mouseover'] {
+	border-color: rgba(195, 34, 34, 0.7); mouseover'
 }
 
 .divareacontent {
