@@ -17,12 +17,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	function ConversationGraph_Abstraction() {
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
+		this.conversationLoadingStateChanged = new Events.EventImpl();
+		this.conversationThoughtsChanged = new Events.EventImpl();
 		
 		this.selection = new Selection();
 		this.mouseOver = new Selection();
+		this.graph = { nodes: [], links: [] };
+		this.thoughtGraph = { nodes: [], links: [] };
 		
 		this.init = function() {
-			loadConversationList().done(ready);
+			loadConversationList()
+			.then(function() { _this.graph.nodes = conversationList })
+			.then(ready);
 		}
 		
 		this.waitUntilReady = function() {
@@ -49,10 +55,15 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.loadConversation = function(d) {
 			var promise = $.Deferred();
+			
+			d.loading = true;
+			d.error = false;
+			_this.conversationLoadingStateChanged.raise(d);
 			Db.loadAndReturnConversationModel(d.hash)
 			.then(function(model) {
 				d.loading = false;
 				d.error = false;
+				_this.conversationLoadingStateChanged.raise(d);
 				for(var i=0; i<model.nodes.length; ++i) hashLookup[model.nodes[i].hash] = model.nodes[i];
 				var links = model.links.map(function(l) { return { 
 					source: hashLookup[l.source], 
@@ -65,9 +76,40 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			.fail(function(error) {
 				d.loading = false;
 				d.error = error;
+				_this.conversationLoadingStateChanged.raise(d);
 				promise.reject(error);
 			});
 			return promise;
+		}
+		
+		this.expandConversation = function(d) {
+				d.expanded = !d.expanded;
+				d.loading = d.expanded ? true : false;
+				_this.mouseOver.clear();
+				
+				if(d.expanded) {
+					_this.loadConversation(d)
+					.done(function(result) {
+						addConversationThoughts(d, result.nodes, result.links);
+					});
+				}
+				else {
+					removeConversationThoughts(d); //TODO: what happens when collapsing whilst loading?
+				}
+		}
+		
+		function removeConversationThoughts(conv) {
+			for(var i=0; i<_this.thoughtGraph.nodes.length; ++i) if(_this.thoughtGraph.nodes[i].conversation.hash == conv.hash) _this.thoughtGraph.nodes.splice(i--, 1);
+			for(var i=0; i<_this.thoughtGraph.links.length; ++i) if(_this.thoughtGraph.links[i].conversation.hash == conv.hash) _this.thoughtGraph.links.splice(i--, 1);
+			
+			_this.conversationThoughtsChanged.raise();
+		}
+		
+		function addConversationThoughts(conv, nodes, links) {
+			for(var i in nodes) { nodes[i].conversation = conv; _this.thoughtGraph.nodes.push(nodes[i]) }
+			for(var i in links) { links[i].conversation = conv; _this.thoughtGraph.links.push(links[i]) }
+			
+			_this.conversationThoughtsChanged.raise();
 		}
 		
 		var conversationList = [];
@@ -83,7 +125,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			if(!Selection.equals(sel, _sel)) {
 				var old = Selection.clone(sel);
 				Selection.clone(_sel, sel);
-				_this.selectionChanged.raise({ oldValue: old, value: sel });
+				_this.selectionChanged.raise({ oldValue: old, value: sel, typeChanged: function(type) {
+					return sel.type == type || old.type == type;
+				} });
 			}
 		}
 		
@@ -99,8 +143,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			return sel.type;
 		}
 		
-		this.item = function() {
-			return sel.item;
+		this.item = function(type) {
+			if(type === undefined || _this.type() == type) return sel.item;
+			else return null;
 		}
 		
 		var sel = { item: null, type: null };
@@ -126,30 +171,33 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		this.init = function(html5node) {
 			scaler = new Scaler();
-			scaler.viewPortChanged.subscribe(onViewPortChanged);
+			scaler.viewPortChanged.subscribe(onViewPortDragged);
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
+			
+			ABSTR.conversationLoadingStateChanged.subscribe(onConversationLoadingStateChanged);
 			
 			initConstants();
 			
 			insertStyle();
 			insertHtml(html5node)
+			.then(initHtmlBoundObjects)
 			.then(initSvg)
 			.then(ABSTR.waitUntilReady)
 			.then(initForce)
 			.then(initThoughtPresentation);
 		}
 		
-		function onViewPortChanged(args) {
-			if(args.transitionTime) setViewPort(args.translate.x, args.translate.y, args.zoom, true, args.transitionTime);
-			else setViewPort(args.translate.x, args.translate.y, args.zoom, false);
-		}
-		
 		this.destroy = function() {
 			style.remove();
 		}
+		
+		function onViewPortDragged(args) {
+			if(args.transitionTime) updateViewPort(args.translate.x, args.translate.y, args.zoom, true, args.transitionTime);
+			else updateViewPort(args.translate.x, args.translate.y, args.zoom, false);
+		}
 	    
-	    function setViewPort(tx, ty, zoom, isAnimation, transitionTime) {
+	    function updateViewPort(tx, ty, zoom, isAnimation, transitionTime) {
 	    	var object = isAnimation ? svgContainer.transition().ease("cubic-out").duration(transitionTime) : svgContainer;
 	        object.attr("transform","translate(" + tx + ',' + ty + ") scale(" + zoom + ")");
 	    };
@@ -160,47 +208,27 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.Conversation) onConversationSelected(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.Conversation) onConversationSelected(null);
-		}
-		
-		function onConversationSelected(d) {
-			updateNodeAttributes();
+			if(args.typeChanged(SelectionTypes.Conversation)) updateNodeAttributes();
 		}
 		
 		function onDblClickConversation(d) {
-				d.expanded = !d.expanded;
-				d.loading = d.expanded ? true : false;
-				ABSTR.mouseOver.clear();
-				updateGraph();
-				
-				if(d.expanded) {
-					ABSTR.loadConversation(d)
-					.done(onConversationLoaded.bind(_this, d))
-					.fail(onConversationError.bind(_this, d));
-				}
-				else {
-					thoughtPresentation.removeConversationItems(d);
-				}
+				ABSTR.expandConversation(d);
+				updateGraph(); //TODO: right position?
 		}
 		
-		function onConversationLoaded(conv, data) {
-			updateGraph();
-			
-			thoughtPresentation.addConversationItems(conv, data.nodes, data.links);
-		}
-		
-		function onConversationError(conv, error) {
+		function onConversationLoadingStateChanged() {
 			updateGraph();
 		}
 		
 		function onMouseEnterConversation(d) {
 			ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
 			
-			if(d.expanded) return;
-			var domNode = $(nodes.filter(function(d2) { return d2.hash == d.hash })[0]);
-			tooltip.$().text(d.title);
-			tooltip.showTooltipAt$Node(domNode);
+			if(!d.expanded) {
+				tooltip.$().text(d.title);
+				
+				var $node = $(nodes.filter(function(d2) { return d2.hash == d.hash })[0]);
+				tooltip.showTooltipAt$Node($node);
+			}
 		}
 		
 		function onMouseLeaveConversation(d) {
@@ -210,18 +238,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.Conversation) onMouseOverConversationChanged(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.Conversation) onMouseOverConversationChanged(null);
+			if(args.typeChanged(SelectionTypes.Conversation)) updateNodeAttributes();
 		}
 		
-		function onMouseOverConversationChanged(d) {
+		function onMouseOverConversationChanged() {
 			updateNodeAttributes();
-		}
-		
-		function clearRightPanel() {
-			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.None);
-			$('#right_bar_header #contentlabel').text('');
-			$('#contbox').html('');
 		}
 		
 		function initConstants() {
@@ -229,7 +250,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				borderColor: []
 			};
 			
-			constants.borderColor[BorderMode.Selected] = '#333';
+			constants.borderColor[BorderMode.Selected] = '#333';  //TODO: liveAttributes?
 			constants.borderColor[BorderMode.MouseOver] = '#c32222';
 		}
 		
@@ -243,19 +264,14 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			return $.ajax({ url: './templates/conversation-graph.html', dataType: 'html' })
 			.done(function(template) {
 				$(html5node).html(template);
-				
-				tooltip = new Tooltip($('#tooltip'));
-				rightPanel = new RightPanel_Presentation(ABSTR);
-				rightPanel.init();
-				
-				$(".right_bar").resizable({
-					handles: 'w, s',
-					minWidth: 335,
-		  			resize: function() {
-						$(this).css("left", 0);
-					}
-				});
 			});
+		}
+		
+		function initHtmlBoundObjects() {
+			tooltip = new Tooltip($('#tooltip'));
+			
+			rightPanel = new RightPanel_Presentation(ABSTR);
+			rightPanel.init();
 		}
 		
 		function initSvg() {
@@ -268,17 +284,12 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			.attr('height', height)
 			.attr('fill', 'white')
 			.on('click', ABSTR.selection.clear)
+			.call(d3.behavior.zoom().scaleExtent([1,8]).on('zoom', scaler.rescale));
 			
-			var tmp = svg.append('svg:g');
-			bg.call(d3.behavior.zoom().scaleExtent([1,8]).on('zoom', scaler.rescale));
-			svgContainer = tmp.append('svg:g');
+			svgContainer = svg.append('svg:g');
 		}
 		
 		function initForce() {
-			graph.nodes = ABSTR.getConversationList();
-			//graph.links = [{ source: 0, target: 1 }];
-			graph.links = [];
-			
 			force = d3.layout.force()
 				.charge(liveAttributes.charge)
 				.gravity(0.15)
@@ -286,11 +297,11 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
-				.nodes(graph.nodes)
-				.links(graph.links);
+				.nodes(ABSTR.graph.nodes)
+				.links(ABSTR.graph.links);
 			
 			links = svgContainer.selectAll('.link')
-	            .data(graph.links)
+	            .data(ABSTR.graph.links)
 	            .enter().append("line")
 	            .attr("class", "link")
 	            .style("stroke", '#444')
@@ -300,28 +311,21 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.style("stroke-opacity", 1);
 				
 			nodes = svgContainer.selectAll(".node")
-	            .data(graph.nodes)
+	            .data(ABSTR.graph.nodes)
 	            .enter().append('g');
 	            
 	        appendConversationSymbolTo(nodes);
+			registerConversationNodeEvents();
 			
-			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
-			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
-			nodes.on('dblclick', onDblClickConversation);
-			nodes.call(force.drag);
 			force.on('tick', onTick);
 			force.start();
 		}
 		
-		function updateGraph() {
-			//updateLinkAttributes();
-			updateNodeAttributes();
-			force.start();
-		}
-		
-		function updateNodeAttributes() {
-			nodes.selectAll('*').remove();
-			appendConversationSymbolTo(nodes);
+		function registerConversationNodeEvents() {
+			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
+			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
+			nodes.on('dblclick', onDblClickConversation);
+			nodes.call(force.drag);
 		}
 	
 		function onTick() {
@@ -336,6 +340,17 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			thoughtPresentation.startEvolution();
 		}
 		
+		function updateGraph() {
+			//updateLinkAttributes();
+			updateNodeAttributes();
+			force.start();
+		}
+		
+		function updateNodeAttributes() {
+			nodes.selectAll('*').remove();
+			appendConversationSymbolTo(nodes);
+		}
+		
 		function appendConversationSymbolTo(parent) {
 			parent
 	            .append("circle")
@@ -346,7 +361,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            .attr('data-bordermode', liveAttributes.borderMode)
 	        parent
 	            .append("circle")
-	            .attr("class", "sub node")
+	            .attr("class", "sub node conversation-symbol")
 	            .attr('data-filled', '1')
 	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
@@ -355,7 +370,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            .attr('cy', 0)
 	        parent
 	            .append("circle")
-	            .attr("class", "sub node")
+	            .attr("class", "sub node conversation-symbol")
 	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? '2' : 'false' })
 	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
@@ -364,7 +379,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
 	        parent
 	            .append("circle")
-	            .attr("class", "sub node")
+	            .attr("class", "sub node conversation-symbol")
 	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? '3' : 'false' })
 	            .attr('data-loading', liveAttributes.conversationLoading)
 	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
@@ -375,6 +390,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	        parent
 	        	.filter(liveAttributes.error)
 	        	.append('line')
+	        	.attr('class', 'conversation-symbol')
 	        	.attr({ x1: 0, x2: 0, y1: -10, y2: 0 })
 	        	.style('stroke-width', '3px')
 	        	.style('stroke', 'red')
@@ -382,17 +398,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 	        parent
 	        	.filter(liveAttributes.error)
 	        	.append('circle')
+	        	.attr('class', 'conversation-symbol')
 	        	.attr({ cx: 0, cy: 8, r: 2 })
 	        	.style('stroke-opacity', '0')
 	        	.style('fill', 'red')
-	            
-	        //put an invisible circle layer on top of everything so that the mouseover event is only raised once when moving the mouse over the node
-	        parent
-	        	.append('circle')
-	        	.attr('class', 'invisible node')
-	            .attr("r", liveAttributes.conversationRadius)
-	            .attr('cx', 0)
-	            .attr('cy', 0)
 		}
 		
 		var thoughtPresentation;
@@ -404,7 +413,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		var force;
 		var scaler;
 		var nodes, links;
-		var graph = { nodes: [], links: [] };
 		var tooltip, rightPanel;
 		var liveAttributes = new LiveAttributes(ABSTR);
 	}
@@ -431,6 +439,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		this.init = function() {
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
+			
+			ABSTR.conversationThoughtsChanged.subscribe(onConversationThoughtsChanged);
+			
 			tooltip = new Tooltip($('#tooltip'));
 			
 			force = d3.layout.force()
@@ -440,8 +451,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
-				.nodes(graph.nodes)
-				.links(graph.links);
+				.nodes(ABSTR.thoughtGraph.nodes)
+				.links(ABSTR.thoughtGraph.links);
 				
 			drawLinks();
 			drawLinkArrows();
@@ -451,19 +462,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			_this.startEvolution();
 		}
 		
-		this.removeConversationItems = function(conv) {
-			for(var i=0; i<graph.nodes.length; ++i) if(graph.nodes[i].conversation.hash == conv.hash) graph.nodes.splice(i--, 1);
-			for(var i=0; i<graph.links.length; ++i) if(graph.links[i].conversation.hash == conv.hash) graph.links.splice(i--, 1);
-			
-			drawLinks();
-			drawNodes();
-			_this.startEvolution();
-		}
-		
-		this.addConversationItems = function(conv, nodes, links) {
-			for(var i in nodes) { nodes[i].conversation = conv; graph.nodes.push(nodes[i]) }
-			for(var i in links) { links[i].conversation = conv; graph.links.push(links[i]) }
-			
+		function onConversationThoughtsChanged() {
 			drawLinks();
 			drawNodes();
 			_this.startEvolution();
@@ -572,7 +571,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			
 			if(objects.links) objects.links.remove();
 			objects.links = svgData.container.selectAll('.thought-link')
-				.data(graph.links)
+				.data(ABSTR.thoughtGraph.links)
 				.enter().append('line')
 				.attr('class', 'thought-link')
 				.on('click', onLinkClicked)
@@ -596,13 +595,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				// Displacement to put the arrow in the middle of the link
 				.attr("refX", -3)
 				.attr("refY", 0.45)
-				.attr("fill", 'rgba(0,0,0,0.75)')
-				.attr("stroke", 'rgba(0,0,0,0.75)')
-				.attr("stroke-linecap", "round")
-				.attr("stroke-linejoin", "round")
-				.attr("stroke-width", 0.1)
-				.attr("stroke-opacity", 1.0)
-				.attr("fill-opacity", 1.0)
 				.attr("markerWidth", 5)
 				.attr("markerHeight", 5)
 				.attr("orient", "auto")
@@ -616,13 +608,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 				.attr("class", "thought-arrowmarker")
 				.attr("refX", -6) 
 				.attr("refY", 0.45)
-				.attr("fill", 'rgba(0,0,0,0.75)')
-				.attr("stroke", 'rgba(0,0,0,0.75)')
-				.attr("stroke-linecap", "round")
-				.attr("stroke-linejoin", "round")
-				.attr("stroke-width", 0.1)
-				.attr("stroke-opacity", 1.0)
-				.attr("fill-opacity", 1.0)
 				.attr("markerWidth", 5)
 				.attr("markerHeight", 5)
 				.attr("orient", "auto")
@@ -638,7 +623,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		function drawNodes() {
 			if(objects.nodes) objects.nodes.remove();
 			objects.nodes = svgData.container.selectAll('.thought-node')
-				.data(graph.nodes)
+				.data(ABSTR.thoughtGraph.nodes)
 				.enter().append('circle')
 				.on('click', onNodeClicked)
 				.call(mouseEnterLeave(onMouseEnter, onMouseLeave))
@@ -670,8 +655,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		function gravity(alpha) {
-			for(var i in graph.nodes) {
-				var d = graph.nodes[i];
+			for(var i in ABSTR.thoughtGraph.nodes) {
+				var d = ABSTR.thoughtGraph.nodes[i];
 				var factor = 0.1;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
 				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
@@ -686,7 +671,6 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		
 		var width = $(window).width();
 		var height = $(window).height();
-		var graph = { nodes: [], links: [] };
 		var force;
 		var objects = { nodes: null, links: null };
 		var tooltip;
@@ -703,6 +687,13 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
+			$(".right_bar").resizable({
+				handles: 'w, s',
+				minWidth: 335,
+	  			resize: function() {
+					$(this).css("left", 0);
+				}
+			});
 		}
 		
 		function onSelectionChanged(args) {
@@ -808,8 +799,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 		}
 		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selection.item(), d)) return BorderMode.Selected;
-			else if(hashEquals(ABSTR.mouseOver.item(), d) && !d.expanded) return BorderMode.MouseOver;
+			if(hashEquals(ABSTR.selection.item(SelectionTypes.Conversation), d)) return BorderMode.Selected;
+			else if(hashEquals(ABSTR.mouseOver.item(SelectionTypes.Conversation), d) && !d.expanded) return BorderMode.MouseOver;
 			else return BorderMode.None;
 		}
 		

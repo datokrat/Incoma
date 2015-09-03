@@ -793,6 +793,10 @@ div.big_button:active{
 	fill-opacity: 0;
 }
 
+.conversation-symbol {
+	pointer-events: none;
+}
+
 .sub.node {
 	stroke: #888;
 	fill-opacity: 1;
@@ -826,6 +830,16 @@ div.big_button:active{
 
 .sub.node[data-visible=false] {
 	display: none;
+}
+
+.thought-arrowmarker {
+	fill: rgba(0,0,0,0.75);
+	stroke: rgba(0,0,0,0.75);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-width: 0.1;
+	stroke-opacity: 1.0;
+	fill-opacity: 1.0;
 }
 
 .thought-node[data-bordermode=normal], .node[data-bordermode=normal] {
