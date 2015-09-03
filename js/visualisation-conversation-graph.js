@@ -694,6 +694,10 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler'], function
 					$(this).css("left", 0);
 				}
 			});
+			
+			$('#showreply').text(Webtext.tx_reply);
+			$('#showconnect').text(Webtext.tx_connect);
+			$('#showeditnode').attr('title', Webtext.tx_edit_thought);
 		}
 		
 		function onSelectionChanged(args) {
