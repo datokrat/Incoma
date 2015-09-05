@@ -1,4 +1,5 @@
-define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'], function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model) {
+define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge'], 
+function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) {
 	function ConversationGraph() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -592,7 +593,8 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 			tooltip = new Tooltip($('#tooltip'));
 			
 			force = d3.layout.force()
-				.charge(-200)
+				.charge(0)
+				//.chargeDistance(400)
 				.gravity(0)
 				.linkDistance(75)
 				.theta(0.95)
@@ -788,6 +790,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 		
 		function onTick(e) {
 			gravity(e.alpha);
+			charge(e.alpha, 0.95);
 			
 			objects.nodes
 				.attr('cx', function(d) { return d.x })
@@ -804,7 +807,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 		function gravity(alpha) {
 			for(var i in ABSTR.thoughtGraph.nodes) {
 				var d = ABSTR.thoughtGraph.nodes[i];
-				var factor = 0.1;
+				var factor = 0.2;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
 				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
 					dist = Math.sqrt(dist);
@@ -813,6 +816,18 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 				}
 				d.x += (d.conversation.x - d.x)*factor*alpha;
 				d.y += (d.conversation.y - d.y)*factor*alpha;
+			}
+		}
+		
+		function charge(alpha, theta) {
+			var nodeGroups = {};
+			for(var i=0; i<ABSTR.thoughtGraph.nodes.length; ++i) {
+				var node = ABSTR.thoughtGraph.nodes[i];
+				var group = nodeGroups[node.conversation.hash] = nodeGroups[node.conversation.hash] || [];
+				group.push(node);
+			}
+			for(var hash in nodeGroups) {
+				GroupCharge.applyCharge(nodeGroups[hash], alpha, theta, function() { return -500 });
 			}
 		}
 		
@@ -1119,7 +1134,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 	
 	function ExpandedConversationLiveAttributes() {
 		this.conversationRadius = function(d) {
-			return 50 * Math.ceil(Math.sqrt(d.thoughtnum)) + 15;
+			return Math.ceil(50 * Math.sqrt(d.thoughtnum)) + 15;
 		}
 		
 		this.charge = function(d) {
