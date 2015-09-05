@@ -38,43 +38,45 @@
 			<div id="contentlabel" class="right_bar_title noselect"><span class="right_bar_title_main">&nbsp</span><span class="right_bar_title_details"></span></div>   
 		</div>   
 		<div id="contbox" class="divareacontent"></div>
-		<div class="hide">
+		<div id="inputpanel">
 			<div id='showreply' class='showreplypanel button'>
 				Webtext.tx_reply
 			</div>
 			<div id='showconnect' class='showconnectpanel button'>
 				Webtext.tx_connect
 			</div>
-			<div id='showeditnode' class='button showedit' title='Webtext.tx_edit_thought'>
+			<!--div id='showeditnode' class='button showedit' title='Webtext.tx_edit_thought'>
 				<div id='showediticon'>
 				</div>
-			</div>
-			<table>
-				<tr>
-					<td id='tdnodetype'>
-						<span class="tx_type_reply"></span>:&nbsp
-						<select id='replynodetype'></select>
-					</td>
-					<td>&nbsp&nbsp&nbsp&nbsp</td>
-					<td id='tdlinktype'>
-						<span class="tx_type_connection"></span>:&nbsp
-						<select id=\"replylinktype\" style='display:inline-block;'></select>
-					</td>
-				</tr>
-			</table>
-			<textarea id='replybox' class='areareply' spellcheck='false' maxlength='5000'></textarea>
-			<span class="tx_summary_reply"></span>:
-			<textarea id='replyboxsum' class='areareplysum' spellcheck='false' maxlength='100'></textarea>&nbsp&nbsp&nbsp&nbsp
-			<div class='replysavecancel'>
-				<center>
-					<div id='savenode' class='save button'>
-						Webtext.tx_save
-					</div>
-					<div id='hidereplypanel' class='cancel button'>
-						<span class="tx_cancel"></span>
-					</div>
-				</center>
-				<div id='replyalert' class='alerttext noselect' style='text-align:right;'>&nbsp</div>
+			</div-->
+			<div id="replypanel">
+				<table>
+					<tr>
+						<td id='tdnodetype'>
+							<span class="tx_type_reply"></span>:&nbsp
+							<select id='replynodetype'></select>
+						</td>
+						<td>&nbsp&nbsp&nbsp&nbsp</td>
+						<td id='tdlinktype'>
+							<span class="tx_type_connection"></span>:&nbsp
+							<select id="replylinktype" style='display:inline-block;'></select>
+						</td>
+					</tr>
+				</table>
+				<textarea id='replybox' class='areareply' spellcheck='false' maxlength='5000'></textarea>
+				<span class="tx_summary_reply"></span>:
+				<textarea id='replyboxsum' class='areareplysum' spellcheck='false' maxlength='100'></textarea>&nbsp&nbsp&nbsp&nbsp
+				<div class='replysavecancel'>
+					<center>
+						<div id='savenode' class='save button'>
+							Webtext.tx_save
+						</div>
+						<div id='hidereplypanel' class='cancel button'>
+							<span class="tx_cancel"></span>
+						</div>
+					</center>
+					<div id='replyalert' class='alerttext noselect' style='text-align:right;'>&nbsp</div>
+				</div>
 			</div>
 		</div>
 	</div>   
