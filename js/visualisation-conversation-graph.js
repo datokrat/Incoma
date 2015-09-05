@@ -438,7 +438,9 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 			nodes.call(force.drag);
 		}
 	
-		function onTick() {
+		function onTick(e) {
+			collide(e.alpha);
+			
 			links
 				.attr('x1', function(d) { return d.source.x })
 				.attr('y1', function(d) { return d.source.y })
@@ -448,6 +450,41 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 				.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
 				
 			thoughtPresentation.startEvolution();
+		}
+		
+		function collide(alpha) {
+			//source: http://bl.ocks.org/mbostock/7881887
+			var quadtree = d3.geom.quadtree(ABSTR.graph.nodes);
+			ABSTR.graph.nodes.forEach(function(d) {
+				var r = 2 * liveAttributes.conversationRadius(d) + 20;
+				var left = d.x - r, right = d.x + r, top = d.y - r, bottom = d.y + r;
+				quadtree.visit(function(quad, x1, y1, x2, y2) {
+					if(quad.point && quad.point !== d) {
+						var dx = quad.point.x - d.x;
+						var dy = quad.point.y - d.y;
+						var distance = Math.sqrt(dx*dx+dy*dy);
+						var minDistance = liveAttributes.conversationRadius(d) + liveAttributes.conversationRadius(quad.point) + 20;
+						var forceDistance = minDistance;
+						if(distance < minDistance) {
+							var factor = (distance-minDistance)/distance / 2;
+							if(liveAttributes.conversationRadius(d) == liveAttributes.conversationRadius(quad.point)) factor /= 2;
+							d.x += (dx *= factor);
+							d.y += (dy *= factor);
+							quad.point.x -= dx;
+							quad.point.y -= dy;
+						}
+						else if(distance < forceDistance) {
+							var factor = (distance-forceDistance)/distance * alpha / 6;
+							if(liveAttributes.conversationRadius(d) == liveAttributes.conversationRadius(quad.point)) factor /= 2;
+							d.x += (dx *= factor);
+							d.y += (dy *= factor);
+							quad.point.x -= dx;
+							quad.point.y -= dy;
+						}
+					}
+					return x1 > right || x2 < left || y1 > bottom || y2 < top;
+				});
+			})
 		}
 		
 		function updateGraph() {
@@ -1086,7 +1123,7 @@ define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model'],
 		}
 		
 		this.charge = function(d) {
-			return -1500 * d.thoughtnum - 200;
+			return -500 * d.thoughtnum - 200;
 		}
 		
 		this.conversationLoading = function(d) {
