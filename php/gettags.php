@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $conversation= $_GET['conversation'];
 
 $lines = file('incomadb.conf');
@@ -9,6 +11,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 $querytags="SELECT tags FROM conversations WHERE hash='".$conversation."'";
 $resulttags=mysql_query($querytags);

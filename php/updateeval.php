@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $conversation = $_POST['conversation'];
 $table = $_POST['table'];
 $variable = $_POST['variable'];
@@ -13,6 +15,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 
 $sqlupdate = 'UPDATE '.$table.' SET '.$variable.'='.$value.' WHERE hash='.$hash; 

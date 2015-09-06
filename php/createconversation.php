@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $conversation = $_POST['conversation'];
 $title = $_POST['title'];
 $time = $_POST['time'];
@@ -14,7 +16,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
-
+mysql_query("SET NAMES 'utf8'");
 
 $sqlnodestable = 'CREATE TABLE nodes_'.$conversation.
     	     '( hash bigint, content text, contentsum tinytext, evalpos int, evalneg int, evaluatedby longtext, adveval text, advevalby longtext, type int, author tinytext, seed tinyint, time bigint )';

@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $conversation= $_POST['conversation'];
 $type= $_POST['type'];
 $hash= $_POST['hash'];
@@ -11,7 +13,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
-
+mysql_query("SET NAMES 'utf8'");
 
 $query="SELECT hash FROM ".$type."s_".$conversation." WHERE hash='".$hash."'";
 $result=mysql_query($query);

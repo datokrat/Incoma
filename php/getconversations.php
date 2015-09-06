@@ -1,4 +1,5 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
 
 $lines = file('incomadb.conf');
 $username = rtrim(str_replace(array("\$username=\"", "\";"), "", $lines[0]));
@@ -8,6 +9,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 $queryconv="SELECT * FROM conversations WHERE ispublic=1";
 $resultconv=mysql_query($queryconv);

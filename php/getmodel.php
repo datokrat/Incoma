@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $conversation= $_GET['conversation'];
 
 $lines = file('incomadb.conf');
@@ -9,6 +11,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 $querynodes="SELECT * FROM nodes_".$conversation;
 $resultnodes=mysql_query($querynodes);
@@ -27,6 +30,6 @@ $data = array();
 $data['nodes'] = $nodesphp;
 $data['links'] = $linksphp;
 
-echo json_encode($data);
+echo json_encode($data, JSON_UNESCAPED_UNICODE);
 
 ?>

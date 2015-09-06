@@ -1,4 +1,5 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
 $newlinkphp = $_POST['newlinkphp'];
 $conversation = $_POST['conversation'];
 
@@ -10,6 +11,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 $newlinkphparray = explode("####", $newlinkphp);
 

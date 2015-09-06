@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: text/html; charset=utf-8');
+
 $lines = file('incomadb.conf');
 $username = rtrim(str_replace(array("\$username=\"", "\";"), "", $lines[0]));
 $password = rtrim(str_replace(array("\$password=\"", "\";"), "", $lines[1]));
@@ -7,6 +9,7 @@ $localhost = rtrim(str_replace(array("\$localhost=\"", "\";"), "", $lines[3]));
 
 mysql_connect($localhost,$username,$password);
 @mysql_select_db($database) or die( "Unable to select database");
+mysql_query("SET NAMES 'utf8'");
 
 $queryconvs="SELECT hash FROM conversations";
 $resultconvs=mysql_query($queryconvs);
