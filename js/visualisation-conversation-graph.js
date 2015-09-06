@@ -344,6 +344,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function onMouseLeaveConversation(d) {
+			if(dragging) return;
 			ABSTR.mouseOver.clear();
 			
 			tooltip.hideTooltip();
@@ -435,16 +436,13 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		
 		function registerConversationNodeEvents() {
 			var drag = force.drag();
-			drag.on('dragstart', function(d) { onMouseLeaveConversation(d); dragging = true; });
+			drag.on('drag', function(d) { onMouseLeaveConversation(d); dragging = true; });
 			drag.on('dragend', function(d) { dragging = false; });
 			
 			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
 			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
 			nodes.on('dblclick', onDblClickConversation);
 			nodes.call(drag);
-			
-			//force.drag.on('dragstart', function() { ABSTR.mouseOver.clear(); dragging = true });
-			//force.drag.on('dragend', function() { dragging = false });
 		}
 	
 		function onTick(e) {
@@ -655,6 +653,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function onMouseEnter(d) {
+			if(dragging) return;
 			ABSTR.mouseOver.select({ type: SelectionTypes.Thought, item: d });
 			updateNodeAttributes();
 			
@@ -665,6 +664,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function onMouseLeave(d) {
+			if(dragging) return;
 			ABSTR.mouseOver.clear();
 			
 			tooltip.hideTooltip();
@@ -779,13 +779,17 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function drawNodes() {
+			var drag = force.drag();
+			drag.on('drag', function(d) { onMouseLeave(d); dragging = true; });
+			drag.on('dragend', function(d) { dragging = false; });
+			
 			if(objects.nodes) objects.nodes.remove();
 			objects.nodes = svgData.container.selectAll('.thought-node')
 				.data(ABSTR.thoughtGraph.nodes)
 				.enter().append('circle')
 				.on('click', onNodeClicked)
 				.call(mouseEnterLeave(onMouseEnter, onMouseLeave))
-				.call(force.drag)
+				.call(drag)
 			updateNodeAttributes();
 		}
 		
@@ -847,6 +851,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		var tooltip;
 		var liveAttributes = new LiveAttributes(ABSTR);
 		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
+		var dragging = false;
 	}
 	
 	function ConversationGraph_Control() {
