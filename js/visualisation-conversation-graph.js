@@ -1,4 +1,4 @@
-define(['pac-builder', 'db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge'], 
+define(['pac-builder', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge'], 
 function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) {
 	function ConversationGraph() {
 		this.name = "conversation graph";
@@ -31,6 +31,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		this.thoughtGraph = { nodes: [], links: [] };
 		
 		this.inputPanel = "none";
+		this.saving = createObservable(false);
 		
 		this.init = function() {
 			loadConversationList()
@@ -55,6 +56,10 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		
 		this.saveThought = function(args) {
 			if(_this.selection.type() != SelectionTypes.Thought) return;
+			
+			_this.saving(true);
+			var savePromise;
+			var error = function(err) { _this.saving(false); alert(Webtext.tx_an_error + ' ' + err) };
 			
 			var replyTo = _this.selection.item();
 			var thoughtType = _this.thoughtType.item();
@@ -109,6 +114,14 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 					newLinkDbData.target = replyTo.hash;
 					
 					newLinks.push(newLink);
+					
+					savePromise = Db.saveNode(newThought)
+					.then(function() { return Db.saveLink(newLinkDbData) }, error );
+					savePromise.fail(error);
+				}
+				else {
+					savePromise = Db.saveNode(newThought);
+					savePromise.fail(error);
 				}
 				
 				++replyTo.conversation.thoughtnum;
@@ -117,6 +130,10 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 				addConversationThoughts(replyTo.conversation, newNodes, newLinks);
 				
 				_this.openCloseReplyPanel(false);
+				
+				savePromise.done(function() {
+					_this.saving(false);
+				});
 				
 				//TODO: explosions
 				//TODO: elastic?
@@ -222,6 +239,19 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		var conversationList = [];
 		var hashLookup = [];
 		var readyPromise = $.Deferred();
+	}
+	
+	function createObservable(value) {
+		var savedValue = value;
+		var obs = function(val) {
+			if(val !== undefined && val !== savedValue) {
+				savedValue = val;
+				obs.changed.raise(savedValue);
+			}
+			return savedValue;
+		};
+		obs.changed = new Events.EventImpl();
+		return obs;
 	}
 	
 	function Selection() {
@@ -863,6 +893,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			ABSTR.inputPanelChanged.subscribe(onInputPanelChanged);
+			ABSTR.saving.changed.subscribe(onSavingStateChanged);
+			
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
 			$(".right_bar").resizable({
 				handles: 'w, s',
@@ -872,6 +904,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 				}
 			});
 			
+			$('#saving').hide();
 			$('#showreply').text(Webtext.tx_reply);
 			$('#showreply').click(ABSTR.openCloseReplyPanel.bind(ABSTR, true));
 			$('#showconnect').text(Webtext.tx_connect);
@@ -958,6 +991,15 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			$('#right_bar_header #contentlabel *').html('');
 			$('#contbox').html('');
 			$('#showreply, #showconnect, #showeditnode').hide();
+		}
+		
+		function onSavingStateChanged(state) {
+			if(state) {
+				$('#saving').show();
+			}
+			else {
+				$('#saving').fadeOut(300);
+			}
 		}
 		
 		function appendLineToContent(text) {
