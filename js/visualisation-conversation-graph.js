@@ -332,6 +332,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function onMouseEnterConversation(d) {
+			if(dragging) return;
 			ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
 			
 			if(!d.expanded) {
@@ -433,10 +434,17 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function registerConversationNodeEvents() {
+			var drag = force.drag();
+			drag.on('dragstart', function(d) { onMouseLeaveConversation(d); dragging = true; });
+			drag.on('dragend', function(d) { dragging = false; });
+			
 			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
 			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
 			nodes.on('dblclick', onDblClickConversation);
-			nodes.call(force.drag);
+			nodes.call(drag);
+			
+			//force.drag.on('dragstart', function() { ABSTR.mouseOver.clear(); dragging = true });
+			//force.drag.on('dragend', function() { dragging = false });
 		}
 	
 		function onTick(e) {
@@ -563,6 +571,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		var nodes, links;
 		var tooltip, rightPanel;
 		var liveAttributes = new LiveAttributes(ABSTR);
+		var dragging = false;
 	}
 	
 	function Tooltip($tooltip) {
