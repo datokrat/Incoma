@@ -10,8 +10,7 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 		return promise;
 	}
 
-	Db.getconversations = function(done){
-
+	Db.getConversations = function(done){
 	//Get the list of conversations (shown in Participate)
 		$.ajax({
 			dataType: 'json',
@@ -19,7 +18,7 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 			async: false,
 			}).done(function(data) {
 			data.conversations.pop();
-			done && done(data.conversations);
+			done && done(data);
 		});
 
 	}
@@ -75,7 +74,7 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 			onNoConversation(); //opennoconversationpanel();
 			return;
 		}
-		modelfromdb =  { nodes: data.nodes, links: data.links, authors: []};
+		modelfromdb =  { nodes: data.nodes, links: data.links, incomingGlobalLinks: data.incomingGlobalLinks, outgoingGlobalLinks: data.outgoingGlobalLinks };
 		}).fail(function(data) {
 	    });
 	}

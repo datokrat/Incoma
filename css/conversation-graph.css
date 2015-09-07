@@ -792,7 +792,8 @@ div.big_button:active{
 
 .conv.node {
 	stroke: #888;
-	fill-opacity: 0;
+	fill: white;
+	fill-opacity: 1;
 }
 
 .conversation-symbol {

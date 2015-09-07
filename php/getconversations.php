@@ -13,7 +13,7 @@ $db->query("SET NAMES 'utf8'");
 
 $queryconv="SELECT * FROM conversations WHERE ispublic=1";
 $resultconv=$db->query($queryconv) or die('{ "success": false, "error": "Query error #1 whilst loading conversations" }');
-//while($convphp[]=mysql_fetch_array($resultconv));
+
 $convphp = $resultconv->fetch_all(MYSQLI_ASSOC);
 $numconv=$resultconv->num_rows;
 

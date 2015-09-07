@@ -37,8 +37,17 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		
 		this.init = function() {
 			loadConversationList()
-			.then(function() { _this.graph.nodes = conversationList })
+			.then(applyConversationListToGraphData)
 			.then(ready);
+		}
+		
+		function applyConversationListToGraphData() {
+			_this.graph.nodes = conversationList;
+			_this.graph.links = globalLinkList.map(function(l) {
+				return { source: conversationHashLookup[l.source_conv], target: conversationHashLookup[l.target_conv], type: l.type };
+			});
+			
+			console.log(_this.graph.link);
 		}
 		
 		this.waitUntilReady = function() {
@@ -138,7 +147,6 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 					_this.saving(false);
 				});
 				
-				//TODO: explosions
 				//TODO: elastic?
 				//TODO: hash_lookup
 				//TODO: db calls
@@ -172,8 +180,10 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		
 		function loadConversationList() {
 			var promise = $.Deferred();
-			Db.getconversations(function(resultList) {
-				conversationList = resultList;
+			Db.getConversations(function(result) {
+				conversationList = result.conversations;
+				conversationList.forEach(function(c) { conversationHashLookup[c.hash] = c });
+				globalLinkList = result.links;
 				_this.conversationListChanged.raise(conversationList);
 				promise.resolve();
 			});
@@ -198,7 +208,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 					type: l.type,
 					direct: l.direct,
 				} });
-				promise.resolve({ nodes: model.nodes, links: links })
+				//TODO: global links hash lookup
+				promise.resolve({ nodes: model.nodes, links: links, incomingGlobalLinks: model.incomingGlobalLinks, outgoingGlobalLinks: model.outgoingGlobalLinks  })
 			})
 			.fail(function(error) {
 				d.loading = false;
@@ -217,6 +228,14 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				if(d.expanded) {
 					_this.loadConversation(d)
 					.done(function(result) {
+						console.log(result);
+						result.incomingGlobalLinks.forEach(function(rawLink) {
+							var sourceConv = conversationHashLookup[rawLink.source_conv];
+							if(sourceConv.expanded) {
+								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
+								addGlobalLink(sourceConv, d, link);
+							}
+						});
 						addConversationThoughts(d, result.nodes, result.links);
 					});
 				}
@@ -239,13 +258,24 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			_this.conversationThoughtsAdded.raise();
 		}
 		
+		function addGlobalLink(sourceConv, targetConv, link) {
+			console.log('global');
+			link.global = true;
+			link.sourceConversation = sourceConv;
+			link.targetConversation = targetConv;
+			_this.thoughtGraph.links.push(link);
+			
+			_this.conversationThoughtsAdded.raise();
+		}
+		
 		function addCreatedConversationThought(conv, node, link) {
 			addConversationThoughts(conv, [node], link ? [link] : []);
 			_this.createdConversationThoughtAdded.raise({ conversation: conv, node: node, link: link });
 		}
 		
-		var conversationList = [];
+		var conversationList = [], globalLinkList = [];
 		var hashLookup = [];
+		var conversationHashLookup = [];
 		var readyPromise = $.Deferred();
 	}
 	
@@ -444,7 +474,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			force = d3.layout.force()
 				.charge(liveAttributes.charge)
 				.gravity(0.15)
-				.linkDistance(150)
+				.linkDistance(function(d) { return liveAttributes.conversationRadius(d.source) + liveAttributes.conversationRadius(d.target) + 50 })
+				.linkStrength(0.2)
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
@@ -642,9 +673,9 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			
 			force = d3.layout.force()
 				.charge(0)
-				//.chargeDistance(400)
 				.gravity(0)
-				.linkDistance(75)
+				.linkDistance(thoughtLiveAttributes.linkDistance)
+				.linkStrength(thoughtLiveAttributes.linkStrength)
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
@@ -900,13 +931,13 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				var d = ABSTR.thoughtGraph.nodes[i];
 				var factor = 0.2;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
-				var conversationRadius = liveAttributes.conversationRadius(d.conversation);
+				var conversationRadius = liveAttributes.conversationRadius(d.conversation) * 0.95;
 					dist = Math.sqrt(dist);
 				if(dist >= conversationRadius) {
-					factor += (dist-conversationRadius)/dist/2;
+					factor += (dist-conversationRadius)/dist*(2+0.2/alpha);
 				}
-				d.x += (d.conversation.x - d.x)*factor*alpha;
-				d.y += (d.conversation.y - d.y)*factor*alpha;
+				d.x += (d.conversation.x - d.x)*factor*(alpha);
+				d.y += (d.conversation.y - d.y)*factor*(alpha);
 			}
 		}
 		
@@ -1255,12 +1286,21 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 	}
 	
 	function ThoughtLiveAttributes(ABSTR) {
+		var _this = this;
 		this.nodeColor = function(d) {
 			return nodeColor[d.type];
 		}
 		
 		this.linkColor = function(d) {
 			return linkColor[d.type];
+		}
+		
+		this.linkDistance = function(d) {
+			return d.global ? 100 : 75;
+		}
+		
+		this.linkStrength = function(d) {
+			return d.global ? 0.5 : 1;
 		}
 		
 		this.replyLink = function(d) {
