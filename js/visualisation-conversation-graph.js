@@ -1051,7 +1051,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		function appendLineToContent(text) {
-			var line = $('<span></span>'); line.text(text); line.html(line.html()+'<br />');
+			var line = $('<span></span>'); line.html(text+'<br />');
 			appendNodeToContent(line);
 		}
 		
