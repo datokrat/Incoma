@@ -20,6 +20,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationLoadingStateChanged = new Events.EventImpl();
 		this.conversationThoughtsAdded = new Events.EventImpl();
+		this.createdConversationThoughtAdded = new Events.EventImpl();
 		this.conversationThoughtsRemoved = new Events.EventImpl();
 		this.inputPanelChanged = new Events.EventImpl();
 		
@@ -128,7 +129,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 				++replyTo.conversation.thoughtnum;
 				_this.conversationListChanged.raise(conversationList);
 				
-				addConversationThoughts(replyTo.conversation, newNodes, newLinks);
+				//addConversationThoughts(replyTo.conversation, newNodes, newLinks, { created: true });
+				addCreatedConversationThought(replyTo.conversation, newThought, newLink);
 				
 				_this.openCloseReplyPanel(false);
 				
@@ -235,6 +237,11 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			for(var i in links) { links[i].conversation = conv; _this.thoughtGraph.links.push(links[i]) }
 			
 			_this.conversationThoughtsAdded.raise();
+		}
+		
+		function addCreatedConversationThought(conv, node, link) {
+			addConversationThoughts(conv, [node], link ? [link] : []);
+			_this.createdConversationThoughtAdded.raise({ conversation: conv, node: node, link: link });
 		}
 		
 		var conversationList = [];
@@ -627,6 +634,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
 			ABSTR.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
+			ABSTR.createdConversationThoughtAdded.subscribe(onCreatedConversationThoughtAdded);
 			ABSTR.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
 			
 			tooltip = new Tooltip($('#tooltip'));
@@ -656,9 +664,30 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			_this.startEvolution();
 		}
 		
+		function onCreatedConversationThoughtAdded(args) {
+			//args = { conversation; node; link; }
+			explode(args.node.x, args.node.y, thoughtLiveAttributes.nodeColor(args.node));
+		}
+		
 		function onConversationThoughtsRemoved(conv) {
 			removeLinks(conv);
 			removeNodes(conv);
+		}
+		
+		function explode(x, y, color) {
+			explosion = svgData.container.append('circle')
+				.attr('class', 'explosion')
+				.attr("cx", x)
+		        .attr("cy", y)
+		        .attr("r", 10)
+				.style("stroke",color)
+				.style('stroke-width', '1px')
+				.style('stroke-opacity', 0.9)
+			explosion.transition().ease('cubic-out').duration(1500)
+				.attr('r', 450)
+				.style('stroke-width', '10px')
+				.style('stroke-opacity', 0)
+				.remove();
 		}
 		
 		this.startEvolution = function() {
@@ -773,18 +802,19 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 				.style('stroke', '#333') //TODO: unify borderColors
 			
 			//if(objects.links) objects.links.remove();
-			objects.links = svgData.container.selectAll('.thought-link')
+			objects.newLinks = svgData.container.selectAll('.thought-link')
 				.data(ABSTR.thoughtGraph.links)
-				.enter().append('line')
+				.enter().insert('line', '.thought-node')
 				.attr('class', 'thought-link')
 				.on('click', onLinkClicked)
 				.call(mouseEnterLeave(onMouseEnterLink, onMouseLeaveLink))
-			objects.links
+			objects.newLinks
 				.filter(thoughtLiveAttributes.replyLink)
 				.attr('marker-start', 'url(#thought-arrow)')
-			objects.links
+			objects.newLinks
 				.filter(notFn(thoughtLiveAttributes.replyLink))
 				.attr('marker-start', 'url(#thought-invertedarrow)')
+			objects.links = svgData.container.selectAll('.thought-link');
 				
 			updateLinkAttributes();
 		}
@@ -829,18 +859,19 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			drag.on('dragend', function(d) { dragging = false; });
 			
 			//if(objects.nodes) objects.nodes.remove();
-			objects.nodes = svgData.container.selectAll('.thought-node')
+			objects.newNodes = svgData.container.selectAll('.thought-node')
 				.data(ABSTR.thoughtGraph.nodes)
 				.enter().append('circle')
+				.attr('class', 'thought-node')
 				.on('click', onNodeClicked)
 				.call(mouseEnterLeave(onMouseEnter, onMouseLeave))
 				.call(drag)
+			objects.nodes = svgData.container.selectAll('.thought-node');
 			updateNodeAttributes();
 		}
 		
 		function updateNodeAttributes() {
 			objects.nodes
-				.attr('class', 'thought-node')
 				.attr('r', 15)
 				.attr('data-bordermode', thoughtLiveAttributes.borderMode)
 				.style('fill', thoughtLiveAttributes.nodeColor)

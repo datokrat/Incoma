@@ -903,6 +903,10 @@ div.big_button:active{
 	display: none;
 }
 
+.explosion {
+	fill-opacity: 0;
+}
+
 @keyframes loadingSubNode {
 	0% {
 		opacity: 1;
