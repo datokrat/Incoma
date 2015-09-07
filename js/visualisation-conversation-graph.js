@@ -1,5 +1,5 @@
-define(['pac-builder', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge'], 
-function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) {
+define(['pac-builder', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners'], 
+function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag) {
 	function ConversationGraph() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -473,9 +473,10 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function registerConversationNodeEvents() {
-			var drag = force.drag();
-			drag.on('drag', function(d) { onMouseLeaveConversation(d); dragging = true; });
-			drag.on('dragend', function(d) { dragging = false; });
+			var drag = Drag.drag(function(dragBehavior) {
+				dragBehavior.on('drag.incoma', function(d) { onMouseLeaveConversation(d); dragging = true; });
+				dragBehavior.on('dragend.incoma', function(d) { dragging = false; });
+			}, force);
 			
 			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
 			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
@@ -792,14 +793,14 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function drawLinks() {
-			if(objects.mouseOverLinkBorder) objects.mouseOverLinkBorder.remove();
-			objects.mouseOverLinkBorder = svgData.container.append('line')
-				.attr('class', 'thought-overlink')
-				.style('stroke', '#c32222') //TODO: unify borderColors
-			if(objects.selectedLinkBorder) objects.selectedLinkBorder.remove();
-			objects.selectedLinkBorder = svgData.container.append('line')
-				.attr('class', 'thought-selectedlink')
-				.style('stroke', '#333') //TODO: unify borderColors
+			if(!objects.mouseOverLinkBorder)
+				objects.mouseOverLinkBorder = svgData.container.append('line')
+					.attr('class', 'thought-overlink')
+					.style('stroke', '#c32222') //TODO: unify borderColors
+			if(!objects.selectedLinkBorder)
+				objects.selectedLinkBorder = svgData.container.append('line')
+					.attr('class', 'thought-selectedlink')
+					.style('stroke', '#333') //TODO: unify borderColors
 			
 			//if(objects.links) objects.links.remove();
 			objects.newLinks = svgData.container.selectAll('.thought-link')
@@ -854,9 +855,10 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		}
 		
 		function drawNodes() {
-			var drag = force.drag();
-			drag.on('drag', function(d) { onMouseLeave(d); dragging = true; });
-			drag.on('dragend', function(d) { dragging = false; });
+			var drag = Drag.drag(function(dragBehavior) {
+				dragBehavior.on('drag.incoma', function(d) { onMouseLeave(d); dragging = true; });
+				dragBehavior.on('dragend.incoma', function(d) { dragging = false; });
+			}, force);
 			
 			//if(objects.nodes) objects.nodes.remove();
 			objects.newNodes = svgData.container.selectAll('.thought-node')
