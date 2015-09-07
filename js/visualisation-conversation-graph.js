@@ -19,7 +19,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 		var _this = this;
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationLoadingStateChanged = new Events.EventImpl();
-		this.conversationThoughtsChanged = new Events.EventImpl();
+		this.conversationThoughtsAdded = new Events.EventImpl();
+		this.conversationThoughtsRemoved = new Events.EventImpl();
 		this.inputPanelChanged = new Events.EventImpl();
 		
 		this.selection = new Selection();
@@ -226,14 +227,14 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			for(var i=0; i<_this.thoughtGraph.nodes.length; ++i) if(_this.thoughtGraph.nodes[i].conversation.hash == conv.hash) _this.thoughtGraph.nodes.splice(i--, 1);
 			for(var i=0; i<_this.thoughtGraph.links.length; ++i) if(_this.thoughtGraph.links[i].conversation.hash == conv.hash) _this.thoughtGraph.links.splice(i--, 1);
 			
-			_this.conversationThoughtsChanged.raise();
+			_this.conversationThoughtsRemoved.raise(conv);
 		}
 		
 		function addConversationThoughts(conv, nodes, links) {
 			for(var i in nodes) { nodes[i].conversation = conv; _this.thoughtGraph.nodes.push(nodes[i]) }
 			for(var i in links) { links[i].conversation = conv; _this.thoughtGraph.links.push(links[i]) }
 			
-			_this.conversationThoughtsChanged.raise();
+			_this.conversationThoughtsAdded.raise();
 		}
 		
 		var conversationList = [];
@@ -625,7 +626,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
-			ABSTR.conversationThoughtsChanged.subscribe(onConversationThoughtsChanged);
+			ABSTR.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
+			ABSTR.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
 			
 			tooltip = new Tooltip($('#tooltip'));
 			
@@ -648,10 +650,15 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			_this.startEvolution();
 		}
 		
-		function onConversationThoughtsChanged() {
+		function onConversationThoughtsAdded() {
 			drawLinks();
 			drawNodes();
 			_this.startEvolution();
+		}
+		
+		function onConversationThoughtsRemoved(conv) {
+			removeLinks(conv);
+			removeNodes(conv);
 		}
 		
 		this.startEvolution = function() {
@@ -747,6 +754,14 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			});
 		}
 		
+		function removeLinks(conv) {
+			objects.links.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
+		}
+		
+		function removeNodes(conv) {
+			objects.nodes.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
+		}
+		
 		function drawLinks() {
 			if(objects.mouseOverLinkBorder) objects.mouseOverLinkBorder.remove();
 			objects.mouseOverLinkBorder = svgData.container.append('line')
@@ -757,7 +772,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 				.attr('class', 'thought-selectedlink')
 				.style('stroke', '#333') //TODO: unify borderColors
 			
-			if(objects.links) objects.links.remove();
+			//if(objects.links) objects.links.remove();
 			objects.links = svgData.container.selectAll('.thought-link')
 				.data(ABSTR.thoughtGraph.links)
 				.enter().append('line')
@@ -813,7 +828,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge) 
 			drag.on('drag', function(d) { onMouseLeave(d); dragging = true; });
 			drag.on('dragend', function(d) { dragging = false; });
 			
-			if(objects.nodes) objects.nodes.remove();
+			//if(objects.nodes) objects.nodes.remove();
 			objects.nodes = svgData.container.selectAll('.thought-node')
 				.data(ABSTR.thoughtGraph.nodes)
 				.enter().append('circle')
