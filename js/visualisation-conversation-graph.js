@@ -1,5 +1,5 @@
-define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners'], 
-function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag) {
+define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners', 'conversation-graph/util'], 
+function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag, Util) {
 	function ConversationGraphVis() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -20,20 +20,18 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		this.graph = new ConversationGraph.Abstraction();
 		
 		this.inputPanelChanged = new Events.EventImpl();
-		this.conversationLoadingStateChanged = new Events.EventImpl();
 		
-		this.selection = new Selection();
-		this.mouseOver = new Selection();
-		this.thoughtType = new Selection();
-		this.thoughtLinkType = new Selection();
+		this.thoughtType = new Util.Selection();
+		this.thoughtLinkType = new Util.Selection();
 		
 		this.inputPanel = "none";
 		this.saving = createObservable(false);
 		
 		this.init = function() {
+			this.graph.conversationExpanded.subscribe(onConversationExpanded);
+			
 			loadConversationList()
-			.then(applyConversationListToGraphData)
-			.then(ready);
+			.then(applyConversationListToGraphData);
 		}
 		
 		function applyConversationListToGraphData() {
@@ -45,14 +43,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			_this.graph.addToConversationGraph(nodes, links);
 		}
 		
-		this.waitUntilReady = function() {
-			return ready;
-		}
-		
-		function ready() {
-			readyPromise.resolve();
-		}
-		
 		this.openCloseReplyPanel = function(open) {
 			if(open) _this.inputPanel = "reply";
 			else _this.inputPanel = "none";
@@ -61,13 +51,13 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		this.saveThought = function(args) {
-			if(_this.selection.type() != SelectionTypes.Thought) return;
+			if(_this.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return;
 			
 			_this.saving(true);
 			var savePromise;
 			var error = function(err) { _this.saving(false); alert(Webtext.tx_an_error + ' ' + err) };
 			
-			var replyTo = _this.selection.item();
+			var replyTo = _this.graph.selection.item();
 			var thoughtType = _this.thoughtType.item();
 			var linkType = _this.thoughtLinkType.item();
 			
@@ -180,12 +170,12 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			
 			d.loading = true;
 			d.error = false;
-			_this.conversationLoadingStateChanged.raise(d);
+			_this.graph.conversationLoadingStateChanged.raise(d);
 			Db.loadAndReturnConversationModel(d.hash)
 			.then(function(model) {
 				d.loading = false;
 				d.error = false;
-				_this.conversationLoadingStateChanged.raise(d);
+				_this.graph.conversationLoadingStateChanged.raise(d);
 				for(var i=0; i<model.nodes.length; ++i) hashLookup[model.nodes[i].hash] = model.nodes[i];
 				var links = model.links.map(function(l) { return { 
 					source: hashLookup[l.source], 
@@ -199,46 +189,36 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			.fail(function(error) {
 				d.loading = false;
 				d.error = error;
-				_this.conversationLoadingStateChanged.raise(d);
+				_this.graph.conversationLoadingStateChanged.raise(d);
 				promise.reject(error);
 			});
 			return promise;
 		}
 		
-		this.expandConversation = function(d) {
-				d.expanded = !d.expanded;
-				d.loading = d.expanded ? true : false;
-				_this.mouseOver.clear();
-				
-				if(d.expanded) {
-					_this.loadConversation(d)
-					.done(function(result) {
-						result.incomingGlobalLinks.forEach(function(rawLink) {
-							var sourceConv = conversationHashLookup[rawLink.source_conv];
-							if(sourceConv.expanded) {
-								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
-								_this.graph.addGlobalLink(sourceConv, d, link);
-							}
-						});
-						result.outgoingGlobalLinks.forEach(function(rawLink) {
-							var targetConv = conversationHashLookup[rawLink.target_conv];
-							if(targetConv.expanded) {
-								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
-								_this.graph.addGlobalLink(d, targetConv, link);
-							}
-						});
-						_this.graph.addConversationThoughts(d, result.nodes, result.links);
-					});
-				}
-				else {
-					_this.graph.removeConversationThoughts(d); //TODO: what happens when collapsing whilst loading?
-				}
+		function onConversationExpanded(d) {
+			_this.loadConversation(d)
+			.done(function(result) {
+				result.incomingGlobalLinks.forEach(function(rawLink) {
+					var sourceConv = conversationHashLookup[rawLink.source_conv];
+					if(sourceConv.expanded) {
+						var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
+						_this.graph.addGlobalLink(sourceConv, d, link);
+					}
+				});
+				result.outgoingGlobalLinks.forEach(function(rawLink) {
+					var targetConv = conversationHashLookup[rawLink.target_conv];
+					if(targetConv.expanded) {
+						var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
+						_this.graph.addGlobalLink(d, targetConv, link);
+					}
+				});
+				_this.graph.addConversationThoughts(d, result.nodes, result.links);
+			});
 		}
 		
 		var conversationList = [], globalLinkList = [];
 		var hashLookup = [];
 		var conversationHashLookup = [];
-		var readyPromise = $.Deferred();
 	}
 	
 	function createObservable(value) {
@@ -254,78 +234,18 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		return obs;
 	}
 	
-	function Selection() {
-		var _this = this;
-		this.selectionChanged = new Events.EventImpl();
-		
-		this.select = function(_sel) {
-			if(!Selection.equals(sel, _sel))
-				_this.reselect(_sel);
-		}
-		
-		this.reselect = function(_sel) {
-			var old = Selection.clone(sel);
-			Selection.clone(_sel, sel);
-			_this.selectionChanged.raise({ oldValue: old, value: sel, typeChanged: function(type) {
-				return sel.type == type || old.type == type;
-			} });
-		}
-		
-		this.clear = function() {
-			_this.select({ type: null, item: null });
-		}
-		
-		this.selectTypeFn = function(type) {
-			return function(item) { return _this.select({ item: item, type: type }) };
-		}
-		
-		this.type = function() {
-			return sel.type;
-		}
-		
-		this.item = function(type) {
-			if(type === undefined || _this.type() == type) return sel.item;
-			else return null;
-		}
-		
-		var sel = { item: null, type: null };
-	}
-	Selection.clone = function(from, to) {
-		to = to || {};
-		to.type = from.type;
-		to.item = from.item;
-		return to;
-	}
-	Selection.equals = function(x, y) {
-		return x.type == y.type && x.item == y.item;
-	}
-	
-	var SelectionTypes = {
-		Conversation: 0,
-		Thought: 1,
-		ThoughtLink: 2,
-	}
-	
 	function ConversationGraph_Presentation(ABSTR) {
 		var _this = this;
 		
 		this.init = function(html5node) {
 			scaler = new Scaler();
 			scaler.viewPortChanged.subscribe(onViewPortDragged);
-			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
-			
-			ABSTR.graph.conversationListChanged.subscribe(updateGraph);
-			ABSTR.conversationLoadingStateChanged.subscribe(onConversationLoadingStateChanged);
-			
-			initConstants();
 			
 			insertStyle();
 			insertHtml(html5node)
 			.then(initHtmlBoundObjects)
 			.then(initSvg)
-			.then(ABSTR.waitUntilReady)
-			.then(initForce)
+			.then(initConversationPresentation)
 			.then(initThoughtPresentation);
 		}
 		
@@ -343,58 +263,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 	        object.attr("transform","translate(" + tx + ',' + ty + ") scale(" + zoom + ")");
 	    };
 		
+		function initConversationPresentation() {
+			conversationPresentation = new ConversationGraph.ConversationPresentation(ABSTR.graph, { svg: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
+			conversationPresentation.init();
+		}
+		
 		function initThoughtPresentation() {
 			thoughtPresentation = new ConversationGraph_ThoughtPresentation(ABSTR, { container: svgContainer });
 			thoughtPresentation.init();
-		}
-		
-		function onSelectionChanged(args) {
-			if(args.typeChanged(SelectionTypes.Conversation)) updateNodeAttributes();
-		}
-		
-		function onDblClickConversation(d) {
-				ABSTR.expandConversation(d);
-				updateGraph(); //TODO: right position?
-		}
-		
-		function onConversationLoadingStateChanged() {
-			updateGraph();
-		}
-		
-		function onMouseEnterConversation(d) {
-			if(dragging) return;
-			ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
-			
-			if(!d.expanded) {
-				tooltip.$().text(d.title);
-				
-				var $node = $(nodes.filter(function(d2) { return d2.hash == d.hash })[0]);
-				tooltip.showTooltipAt$Node($node);
-			}
-		}
-		
-		function onMouseLeaveConversation(d) {
-			if(dragging) return;
-			ABSTR.mouseOver.clear();
-			
-			tooltip.hideTooltip();
-		}
-		
-		function onMouseOverSelectionChanged(args) {
-			if(args.typeChanged(SelectionTypes.Conversation)) updateNodeAttributes();
-		}
-		
-		function onMouseOverConversationChanged() {
-			updateNodeAttributes();
-		}
-		
-		function initConstants() {
-			constants = {
-				borderColor: []
-			};
-			
-			constants.borderColor[BorderMode.Selected] = '#333';  //TODO: liveAttributes?
-			constants.borderColor[BorderMode.MouseOver] = '#c32222';
 		}
 		
 		function insertStyle() {
@@ -426,170 +302,10 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			.attr('width', width)
 			.attr('height', height)
 			.attr('fill', 'white')
-			.on('click', ABSTR.selection.clear)
+			.on('click', ABSTR.graph.clearSelection.bind(ABSTR.graph))
 			.call(d3.behavior.zoom().scaleExtent([1,8]).on('zoom', scaler.rescale));
 			
 			svgContainer = svg.append('svg:g');
-		}
-		
-		function initForce() {
-			force = d3.layout.force()
-				.charge(liveAttributes.charge)
-				.gravity(0.15)
-				.linkDistance(function(d) { return liveAttributes.conversationRadius(d.source) + liveAttributes.conversationRadius(d.target) + 50 })
-				.linkStrength(0.2)
-				.theta(0.95)
-				.friction(0.85)
-				.size([width, height])
-				.nodes(ABSTR.graph.graph.nodes)
-				.links(ABSTR.graph.graph.links);
-			
-			links = svgContainer.selectAll('.link')
-	            .data(ABSTR.graph.graph.links)
-	            .enter().append("line")
-	            .attr("class", "link")
-	            .style("stroke", '#888')
-	            .style("stroke-width", 5)
-				.style("stroke-dasharray", '8,6')
-				.style("stroke-linecap", "round")
-				.style("stroke-opacity", 1);
-				
-			nodes = svgContainer.selectAll(".node")
-	            .data(ABSTR.graph.graph.nodes)
-	            .enter().append('g');
-	            
-	        appendConversationSymbolTo(nodes);
-			registerConversationNodeEvents();
-			
-			force.on('tick', onTick);
-			force.start();
-		}
-		
-		function registerConversationNodeEvents() {
-			var drag = Drag.drag(function(dragBehavior) {
-				dragBehavior.on('drag.incoma', function(d) { onMouseLeaveConversation(d); dragging = true; });
-				dragBehavior.on('dragend.incoma', function(d) { dragging = false; });
-			}, force);
-			
-			nodes.on('click', ABSTR.selection.selectTypeFn(SelectionTypes.Conversation));
-			nodes.call(mouseEnterLeave(onMouseEnterConversation, onMouseLeaveConversation));
-			nodes.on('dblclick', onDblClickConversation);
-			nodes.call(drag);
-		}
-	
-		function onTick(e) {
-			collide(e.alpha);
-			
-			links
-				.attr('x1', function(d) { return d.source.x })
-				.attr('y1', function(d) { return d.source.y })
-				.attr('x2', function(d) { return d.target.x })
-				.attr('y2', function(d) { return d.target.y });
-			nodes
-				.attr('transform', function(d) { return 'translate('+d.x +','+d.y+')' });
-				
-			thoughtPresentation.startEvolution();
-		}
-		
-		function collide(alpha) {
-			//source: http://bl.ocks.org/mbostock/7881887
-			var quadtree = d3.geom.quadtree(ABSTR.graph.graph.nodes);
-			ABSTR.graph.graph.nodes.forEach(function(d) {
-				var r = 2 * liveAttributes.conversationRadius(d) + 40;
-				var left = d.x - r, right = d.x + r, top = d.y - r, bottom = d.y + r;
-				quadtree.visit(function(quad, x1, y1, x2, y2) {
-					if(quad.point && quad.point !== d) {
-						var dx = quad.point.x - d.x;
-						var dy = quad.point.y - d.y;
-						var distance = Math.sqrt(dx*dx+dy*dy);
-						var minDistance = liveAttributes.conversationRadius(d) + liveAttributes.conversationRadius(quad.point) + 20;
-						var forceDistance = minDistance + 40;
-						var mass = liveAttributes.conversationRadius(quad.point)*liveAttributes.conversationRadius(quad.point);
-						mass /= liveAttributes.conversationRadius(d)*liveAttributes.conversationRadius(d) + liveAttributes.conversationRadius(quad.point)*liveAttributes.conversationRadius(quad.point);
-						if(distance < minDistance) {
-							var factor = (distance-minDistance)/distance / 2;
-							if(liveAttributes.conversationRadius(d) == liveAttributes.conversationRadius(quad.point)) factor /= 2;
-							d.x += 2*mass*(dx *= factor);
-							d.y += 2*mass*(dy *= factor);
-							quad.point.x -= 2*(1-mass)*dx;
-							quad.point.y -= 2*(1-mass)*dy;
-						}
-						else if(distance < forceDistance) {
-							var factor = (distance-forceDistance)/distance * alpha / 6;
-							if(liveAttributes.conversationRadius(d) == liveAttributes.conversationRadius(quad.point)) factor /= 2;
-							d.x += (dx *= factor);
-							d.y += (dy *= factor);
-							quad.point.x -= dx;
-							quad.point.y -= dy;
-						}
-					}
-					return x1 > right || x2 < left || y1 > bottom || y2 < top;
-				});
-			})
-		}
-		
-		function updateGraph() {
-			//updateLinkAttributes();
-			updateNodeAttributes();
-			force.start();
-		}
-		
-		function updateNodeAttributes() {
-			nodes.selectAll('*').remove();
-			appendConversationSymbolTo(nodes);
-		}
-		
-		function appendConversationSymbolTo(parent) {
-			parent
-	            .append("circle")
-	            .attr("class", "conv node")
-	            .attr("r", liveAttributes.conversationRadius)
-	            .attr('cx', 0)
-	            .attr('cy', 0)
-	            .attr('data-bordermode', liveAttributes.borderMode)
-	        parent
-	            .append("circle")
-	            .attr("class", "sub node conversation-symbol")
-	            .attr('data-filled', '1')
-	            .attr('data-loading', liveAttributes.conversationLoading)
-	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
-	            .attr("r", 3)
-	            .attr('cx', 7)
-	            .attr('cy', 0)
-	        parent
-	            .append("circle")
-	            .attr("class", "sub node conversation-symbol")
-	            .attr('data-filled', function(d) { return (d.thoughtnum >= 4) ? '2' : 'false' })
-	            .attr('data-loading', liveAttributes.conversationLoading)
-	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
-	            .attr("r", 3)
-	            .attr('cx', 7*Math.cos(2*1/3*Math.PI))
-	            .attr('cy', 7*Math.sin(2*1/3*Math.PI))
-	        parent
-	            .append("circle")
-	            .attr("class", "sub node conversation-symbol")
-	            .attr('data-filled',  function(d) { return (d.thoughtnum >= 10) ? '3' : 'false' })
-	            .attr('data-loading', liveAttributes.conversationLoading)
-	            .attr('data-visible', liveAttributes.conversationSymbolVisible)
-	            .attr("r", 3)
-	            .attr('cx', 7*Math.cos(2*2/3*Math.PI))
-	            .attr('cy', 7*Math.sin(2*2/3*Math.PI))
-	            
-	        parent
-	        	.filter(liveAttributes.error)
-	        	.append('line')
-	        	.attr('class', 'conversation-symbol')
-	        	.attr({ x1: 0, x2: 0, y1: -10, y2: 0 })
-	        	.style('stroke-width', '3px')
-	        	.style('stroke', 'red')
-				.style("stroke-linecap", "round")
-	        parent
-	        	.filter(liveAttributes.error)
-	        	.append('circle')
-	        	.attr('class', 'conversation-symbol')
-	        	.attr({ cx: 0, cy: 8, r: 2 })
-	        	.style('stroke-opacity', '0')
-	        	.style('fill', 'red')
 		}
 		
 		var thoughtPresentation;
@@ -602,7 +318,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		var scaler;
 		var nodes, links;
 		var tooltip, rightPanel;
-		var liveAttributes = new LiveAttributes(ABSTR);
 		var dragging = false;
 	}
 	
@@ -626,12 +341,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		var _this = this;
 		
 		this.init = function() {
-			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
+			ABSTR.graph.selection.selectionChanged.subscribe(onSelectionChanged);
+			ABSTR.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
 			ABSTR.graph.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
 			ABSTR.graph.createdConversationThoughtAdded.subscribe(onCreatedConversationThoughtAdded);
 			ABSTR.graph.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
+			
+			ABSTR.graph.conversationPositionsChanged.subscribe(this.startEvolution);
 			
 			tooltip = new Tooltip($('#tooltip'));
 			
@@ -691,19 +408,19 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		function onLinkClicked(d) {
-			ABSTR.selection.select({ type: SelectionTypes.ThoughtLink, item: d });
+			ABSTR.graph.selection.select({ type: ConversationGraph.SelectionTypes.ThoughtLink, item: d });
 		}
 		
 		function onNodeClicked(d) {
-			ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
+			ABSTR.graph.selection.select({ type: ConversationGraph.SelectionTypes.Thought, item: d });
 		}
 		
 		function onSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.Thought) onThoughtSelectionChanged(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.Thought) onThoughtSelectionChanged(null);
+			if(args.value.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelectionChanged(args.value.item);
+			else if(args.oldValue.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelectionChanged(null);
 			
-			if(args.value.type == SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(null);
+			if(args.value.type == ConversationGraph.SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(args.value.item);
+			else if(args.oldValue.type == ConversationGraph.SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(null);
 		}
 		
 		function onThoughtSelectionChanged(d) {
@@ -716,7 +433,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		
 		function onMouseEnter(d) {
 			if(dragging) return;
-			ABSTR.mouseOver.select({ type: SelectionTypes.Thought, item: d });
+			ABSTR.graph.mouseOver.select({ type: ConversationGraph.SelectionTypes.Thought, item: d });
 			updateNodeAttributes();
 			
 			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
@@ -727,23 +444,23 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		
 		function onMouseLeave(d) {
 			if(dragging) return;
-			ABSTR.mouseOver.clear();
+			ABSTR.graph.mouseOver.clear();
 			
 			tooltip.hideTooltip();
 			updateNodeAttributes();
 		}
 		
 		function onMouseEnterLink(d) {
-			ABSTR.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
+			ABSTR.graph.mouseOver.select({ type: ConversationGraph.SelectionTypes.ThoughtLink, item: d });
 		}
 		
 		function onMouseLeaveLink(d) {
-			ABSTR.mouseOver.clear();
+			ABSTR.graph.mouseOver.clear();
 		}
 		
 		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.ThoughtLink) onMouseOverLinkChanged(null);
+			if(args.value.type == ConversationGraph.SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.value.item);
+			else if(args.oldValue.type == ConversationGraph.SelectionTypes.ThoughtLink) onMouseOverLinkChanged(null);
 		}
 		
 		function onMouseOverLinkChanged(d) {
@@ -751,14 +468,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		function updateLinkBorder() {
-			var over = ABSTR.mouseOver.item();
-			var sel = ABSTR.selection.item();
+			var over = ABSTR.graph.mouseOver.item();
+			var sel = ABSTR.graph.selection.item();
 			var active = [];
 			var inactive = [];
-			if(ABSTR.selection.type() == SelectionTypes.ThoughtLink && sel)
+			if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.ThoughtLink && sel)
 				active.push({ linkBorder: objects.selectedLinkBorder, d: sel })
 			else inactive.push(objects.selectedLinkBorder);
-			if(ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
+			if(ABSTR.graph.mouseOver.type() == ConversationGraph.SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
 				active.push({ linkBorder: objects.mouseOverLinkBorder, d: over });
 			else inactive.push(objects.mouseOverLinkBorder);
 			
@@ -922,7 +639,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		var force;
 		var objects = { nodes: null, links: null };
 		var tooltip;
-		var liveAttributes = new LiveAttributes(ABSTR);
+		var liveAttributes = new ConversationGraph.ConversationLiveAttributes(ABSTR);
 		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
 		var dragging = false;
 	}
@@ -933,8 +650,8 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 	
 	function RightPanel_Presentation(ABSTR) {
 		this.init = function() {
-			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
+			ABSTR.graph.selection.selectionChanged.subscribe(onSelectionChanged);
+			ABSTR.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			ABSTR.inputPanelChanged.subscribe(onInputPanelChanged);
 			ABSTR.saving.changed.subscribe(onSavingStateChanged);
 			
@@ -965,8 +682,8 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		function onSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.Conversation) onConversationSelected(args.value.item);
-			else if(args.value.type == SelectionTypes.Thought) onThoughtSelected(args.value.item);
+			if(args.value.type == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(args.value.item);
+			else if(args.value.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(args.value.item);
 			else if(args.value.type == null) clear();
 		}
 		
@@ -999,14 +716,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == SelectionTypes.Thought) onMouseOverThoughtChanged(args.value.item);
-			else if(args.oldValue.type == SelectionTypes.Thought) onMouseOverThoughtChanged(null);
+			if(args.value.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(args.value.item);
+			else if(args.oldValue.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(null);
 		}
 		
 		function onMouseOverThoughtChanged(d) {
-			if(d) {
+			if(d && !hashEquals(ABSTR.graph.selection.item(), d)) {
 				clear();
-				$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.MouseOver);
+				$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.MouseOver);
 				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
 				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
 			
@@ -1020,17 +737,17 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		
 		function showSelected() {
 			clear();
-			if(ABSTR.selection.type() == SelectionTypes.Conversation) onConversationSelected(ABSTR.selection.item());
-			else if(ABSTR.selection.type() == SelectionTypes.Thought) onThoughtSelected(ABSTR.selection.item());
+			if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(ABSTR.graph.selection.item());
+			else if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(ABSTR.graph.selection.item());
 		}
 		
 		function onSomethingSelected() {
-			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.Selected);
+			$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.Selected);
 		}
 		
 		function clear() {
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
-			$('#right_bar_header #contentlabel').attr('data-bordermode', BorderMode.None);
+			$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.None);
 			$('#right_bar_header #contentlabel *').html('');
 			$('#contbox').html('');
 			$('#showreply, #showconnect, #showeditnode').hide();
@@ -1182,73 +899,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 	}
 	
-	function LiveAttributes(ABSTR) {
-		this.conversationRadius = function(d) {
-			return value(liveAttributes(d).conversationRadius, d);
-		}
-		
-		this.charge = function(d) {
-			return value(liveAttributes(d).charge, d);
-		}
-		
-		this.conversationLoading = function(d) {
-			return value(liveAttributes(d).conversationLoading, d);
-		}
-		
-		this.conversationSymbolVisible = function(d) {
-			return value(liveAttributes(d).conversationSymbolVisible, d);
-		}
-		
-		this.error = function(d) {
-			return d.error;
-		}
-		
-		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selection.item(SelectionTypes.Conversation), d)) return BorderMode.Selected;
-			else if(hashEquals(ABSTR.mouseOver.item(SelectionTypes.Conversation), d) && !d.expanded) return BorderMode.MouseOver;
-			else return BorderMode.None;
-		}
-		
-		function liveAttributes(d) {
-			return d.expanded ? expanded : collapsed;
-		}
-		
-		function value(valueOrFunction, d) {
-			if(typeof valueOrFunction == 'function') return valueOrFunction(d);
-			else return valueOrFunction;
-		}
-		
-		var collapsed = new CollapsedConversationLiveAttributes();
-		var expanded = new ExpandedConversationLiveAttributes();
-	}
-	
-	function CollapsedConversationLiveAttributes() {
-		this.conversationRadius = 15;
-		this.charge = -500;
-		this.conversationLoading = false;
-		this.conversationSymbolVisible = function(d) {
-			return !d.error;
-		}
-	}
-	
-	function ExpandedConversationLiveAttributes() {
-		this.conversationRadius = function(d) {
-			return Math.ceil(50 * Math.sqrt(d.thoughtnum)) + 15;
-		}
-		
-		this.charge = function(d) {
-			return -500 * d.thoughtnum - 200;
-		}
-		
-		this.conversationLoading = function(d) {
-			return d.loading;
-		}
-		
-		this.conversationSymbolVisible = function(d) {
-			return d.loading;
-		}
-	}
-	
 	function ThoughtLiveAttributes(ABSTR) {
 		var _this = this;
 		this.nodeColor = function(d) {
@@ -1272,9 +922,9 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selection.item(),d)) return BorderMode.Selected;
-			else if(hashEquals(ABSTR.mouseOver.item(), d)) return BorderMode.MouseOver;
-			else return BorderMode.None;
+			if(hashEquals(ABSTR.graph.selection.item(),d)) return ConversationGraph.BorderModes.Selected;
+			else if(hashEquals(ABSTR.graph.mouseOver.item(), d)) return ConversationGraph.BorderModes.MouseOver;
+			else return ConversationGraph.BorderModes.None;
 		}
 		
 		this.summary = function(d) {
@@ -1291,12 +941,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		//CODE        = ["#000000", "General", "Agreeme", "Disagre", "Consequ", "Alterna", "Equival"]; 
 		var linkColor = ["#000000", "#f9c8a4", "#7adc7c", "#e85959", "#b27de8", "#c87b37", "#ecaa41"];
 	}
-	
-	var BorderMode = {
-		None: 'normal',
-		Selected: 'selected',
-		MouseOver: 'mouseover',
-	};
 	
 	var ThoughtTypes = {
 		General: 1,
