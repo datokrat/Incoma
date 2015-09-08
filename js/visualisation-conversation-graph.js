@@ -1,6 +1,6 @@
-define(['pac-builder', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners'], 
-function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag) {
-	function ConversationGraph() {
+define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners'], 
+function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag) {
+	function ConversationGraphVis() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
 	
@@ -17,20 +17,15 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 	
 	function ConversationGraph_Abstraction() {
 		var _this = this;
-		this.conversationListChanged = new Events.EventImpl();
-		this.conversationLoadingStateChanged = new Events.EventImpl();
-		this.conversationThoughtsAdded = new Events.EventImpl();
-		this.createdConversationThoughtAdded = new Events.EventImpl();
-		this.conversationThoughtsRemoved = new Events.EventImpl();
+		this.graph = new ConversationGraph.Abstraction();
+		
 		this.inputPanelChanged = new Events.EventImpl();
+		this.conversationLoadingStateChanged = new Events.EventImpl();
 		
 		this.selection = new Selection();
 		this.mouseOver = new Selection();
 		this.thoughtType = new Selection();
 		this.thoughtLinkType = new Selection();
-		
-		this.graph = { nodes: [], links: [] };
-		this.thoughtGraph = { nodes: [], links: [] };
 		
 		this.inputPanel = "none";
 		this.saving = createObservable(false);
@@ -42,12 +37,12 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		function applyConversationListToGraphData() {
-			_this.graph.nodes = conversationList;
-			_this.graph.links = globalLinkList.map(function(l) {
+			var nodes = conversationList;
+			var links = globalLinkList.map(function(l) {
 				return { source: conversationHashLookup[l.source_conv], target: conversationHashLookup[l.target_conv], type: l.type };
 			});
 			
-			console.log(_this.graph.link);
+			_this.graph.addToConversationGraph(nodes, links);
 		}
 		
 		this.waitUntilReady = function() {
@@ -135,11 +130,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 					savePromise.fail(error);
 				}
 				
-				++replyTo.conversation.thoughtnum;
-				_this.conversationListChanged.raise(conversationList);
-				
-				//addConversationThoughts(replyTo.conversation, newNodes, newLinks, { created: true });
-				addCreatedConversationThought(replyTo.conversation, newThought, newLink);
+				_this.graph.addCreatedConversationThought(replyTo.conversation, newThought, newLink);
 				
 				_this.openCloseReplyPanel(false);
 				
@@ -149,7 +140,6 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				
 				//TODO: elastic?
 				//TODO: hash_lookup
-				//TODO: db calls
 			})
 			.fail(function() {
 				//TODO
@@ -174,17 +164,12 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			return promise;
 		}
 		
-		this.getConversationList = function() {
-			return conversationList;
-		}
-		
 		function loadConversationList() {
 			var promise = $.Deferred();
 			Db.getConversations(function(result) {
 				conversationList = result.conversations;
 				conversationList.forEach(function(c) { conversationHashLookup[c.hash] = c });
 				globalLinkList = result.links;
-				_this.conversationListChanged.raise(conversationList);
 				promise.resolve();
 			});
 			return promise;
@@ -232,58 +217,22 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 							var sourceConv = conversationHashLookup[rawLink.source_conv];
 							if(sourceConv.expanded) {
 								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
-								addGlobalLink(sourceConv, d, link);
+								_this.graph.addGlobalLink(sourceConv, d, link);
 							}
 						});
 						result.outgoingGlobalLinks.forEach(function(rawLink) {
 							var targetConv = conversationHashLookup[rawLink.target_conv];
 							if(targetConv.expanded) {
 								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
-								addGlobalLink(d, targetConv, link);
+								_this.graph.addGlobalLink(d, targetConv, link);
 							}
 						});
-						addConversationThoughts(d, result.nodes, result.links);
+						_this.graph.addConversationThoughts(d, result.nodes, result.links);
 					});
 				}
 				else {
-					removeConversationThoughts(d); //TODO: what happens when collapsing whilst loading?
+					_this.graph.removeConversationThoughts(d); //TODO: what happens when collapsing whilst loading?
 				}
-		}
-		
-		function removeConversationThoughts(conv) {
-			for(var i=0; i<_this.thoughtGraph.nodes.length; ++i) if(_this.thoughtGraph.nodes[i].conversation.hash == conv.hash) _this.thoughtGraph.nodes.splice(i--, 1);
-			for(var i=0; i<_this.thoughtGraph.links.length; ++i) if(_this.doesLinkBelongToConversation(_this.thoughtGraph.links[i], conv)) _this.thoughtGraph.links.splice(i--, 1);
-			
-			_this.conversationThoughtsRemoved.raise(conv);
-		}
-		
-		this.doesLinkBelongToConversation = function(link, conv) {
-			if(link.global)
-				return hashEquals(link.sourceConversation, conv) || hashEquals(link.targetConversation, conv);
-			else
-				return hashEquals(link.conversation, conv);
-		}
-		
-		function addConversationThoughts(conv, nodes, links) {
-			for(var i in nodes) { nodes[i].conversation = conv; _this.thoughtGraph.nodes.push(nodes[i]) }
-			for(var i in links) { links[i].conversation = conv; _this.thoughtGraph.links.push(links[i]) }
-			
-			_this.conversationThoughtsAdded.raise();
-		}
-		
-		function addGlobalLink(sourceConv, targetConv, link) {
-			console.log('global');
-			link.global = true;
-			link.sourceConversation = sourceConv;
-			link.targetConversation = targetConv;
-			_this.thoughtGraph.links.push(link);
-			
-			_this.conversationThoughtsAdded.raise();
-		}
-		
-		function addCreatedConversationThought(conv, node, link) {
-			addConversationThoughts(conv, [node], link ? [link] : []);
-			_this.createdConversationThoughtAdded.raise({ conversation: conv, node: node, link: link });
 		}
 		
 		var conversationList = [], globalLinkList = [];
@@ -366,7 +315,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
-			ABSTR.conversationListChanged.subscribe(updateGraph);
+			ABSTR.graph.conversationListChanged.subscribe(updateGraph);
 			ABSTR.conversationLoadingStateChanged.subscribe(onConversationLoadingStateChanged);
 			
 			initConstants();
@@ -492,11 +441,11 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
-				.nodes(ABSTR.graph.nodes)
-				.links(ABSTR.graph.links);
+				.nodes(ABSTR.graph.graph.nodes)
+				.links(ABSTR.graph.graph.links);
 			
 			links = svgContainer.selectAll('.link')
-	            .data(ABSTR.graph.links)
+	            .data(ABSTR.graph.graph.links)
 	            .enter().append("line")
 	            .attr("class", "link")
 	            .style("stroke", '#888')
@@ -506,7 +455,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				.style("stroke-opacity", 1);
 				
 			nodes = svgContainer.selectAll(".node")
-	            .data(ABSTR.graph.nodes)
+	            .data(ABSTR.graph.graph.nodes)
 	            .enter().append('g');
 	            
 	        appendConversationSymbolTo(nodes);
@@ -544,8 +493,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		
 		function collide(alpha) {
 			//source: http://bl.ocks.org/mbostock/7881887
-			var quadtree = d3.geom.quadtree(ABSTR.graph.nodes);
-			ABSTR.graph.nodes.forEach(function(d) {
+			var quadtree = d3.geom.quadtree(ABSTR.graph.graph.nodes);
+			ABSTR.graph.graph.nodes.forEach(function(d) {
 				var r = 2 * liveAttributes.conversationRadius(d) + 40;
 				var left = d.x - r, right = d.x + r, top = d.y - r, bottom = d.y + r;
 				quadtree.visit(function(quad, x1, y1, x2, y2) {
@@ -680,9 +629,9 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			ABSTR.selection.selectionChanged.subscribe(onSelectionChanged);
 			ABSTR.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			
-			ABSTR.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
-			ABSTR.createdConversationThoughtAdded.subscribe(onCreatedConversationThoughtAdded);
-			ABSTR.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
+			ABSTR.graph.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
+			ABSTR.graph.createdConversationThoughtAdded.subscribe(onCreatedConversationThoughtAdded);
+			ABSTR.graph.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
 			
 			tooltip = new Tooltip($('#tooltip'));
 			
@@ -694,8 +643,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				.theta(0.95)
 				.friction(0.85)
 				.size([width, height])
-				.nodes(ABSTR.thoughtGraph.nodes)
-				.links(ABSTR.thoughtGraph.links);
+				.nodes(ABSTR.graph.thoughtGraph.nodes)
+				.links(ABSTR.graph.thoughtGraph.links);
 				
 			drawLinks();
 			drawLinkArrows();
@@ -831,7 +780,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		function removeLinks(conv) {
-			objects.links.filter(function(d) { return ABSTR.doesLinkBelongToConversation(d, conv) }).remove();
+			objects.links.filter(function(d) { return ABSTR.graph.doesLinkBelongToConversation(d, conv) }).remove();
 		}
 		
 		function removeNodes(conv) {
@@ -850,7 +799,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			
 			//if(objects.links) objects.links.remove();
 			objects.newLinks = svgData.container.selectAll('.thought-link')
-				.data(ABSTR.thoughtGraph.links)
+				.data(ABSTR.graph.thoughtGraph.links)
 				.enter().insert('line', '.thought-node')
 				.attr('class', 'thought-link')
 				.on('click', onLinkClicked)
@@ -908,7 +857,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			
 			//if(objects.nodes) objects.nodes.remove();
 			objects.newNodes = svgData.container.selectAll('.thought-node')
-				.data(ABSTR.thoughtGraph.nodes)
+				.data(ABSTR.graph.thoughtGraph.nodes)
 				.enter().append('circle')
 				.attr('class', 'thought-node')
 				.on('click', onNodeClicked)
@@ -942,8 +891,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		function gravity(alpha) {
-			for(var i in ABSTR.thoughtGraph.nodes) {
-				var d = ABSTR.thoughtGraph.nodes[i];
+			for(var i in ABSTR.graph.thoughtGraph.nodes) {
+				var d = ABSTR.graph.thoughtGraph.nodes[i];
 				var factor = 0.2;
 				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
 				var conversationRadius = liveAttributes.conversationRadius(d.conversation) * 0.95;
@@ -958,8 +907,8 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		
 		function charge(alpha, theta) {
 			var nodeGroups = {};
-			for(var i=0; i<ABSTR.thoughtGraph.nodes.length; ++i) {
-				var node = ABSTR.thoughtGraph.nodes[i];
+			for(var i=0; i<ABSTR.graph.thoughtGraph.nodes.length; ++i) {
+				var node = ABSTR.graph.thoughtGraph.nodes[i];
 				var group = nodeGroups[node.conversation.hash] = nodeGroups[node.conversation.hash] || [];
 				group.push(node);
 			}
@@ -1463,5 +1412,5 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			obj[key] = props[key];
 	}
 	
-	return ConversationGraph;
+	return ConversationGraphVis;
 });
