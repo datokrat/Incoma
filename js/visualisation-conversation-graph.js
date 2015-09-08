@@ -228,12 +228,18 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 				if(d.expanded) {
 					_this.loadConversation(d)
 					.done(function(result) {
-						console.log(result);
 						result.incomingGlobalLinks.forEach(function(rawLink) {
 							var sourceConv = conversationHashLookup[rawLink.source_conv];
 							if(sourceConv.expanded) {
 								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
 								addGlobalLink(sourceConv, d, link);
+							}
+						});
+						result.outgoingGlobalLinks.forEach(function(rawLink) {
+							var targetConv = conversationHashLookup[rawLink.target_conv];
+							if(targetConv.expanded) {
+								var link = { source: hashLookup[rawLink.source], target: hashLookup[rawLink.target], type: rawLink.type };
+								addGlobalLink(d, targetConv, link);
 							}
 						});
 						addConversationThoughts(d, result.nodes, result.links);
@@ -246,9 +252,16 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		
 		function removeConversationThoughts(conv) {
 			for(var i=0; i<_this.thoughtGraph.nodes.length; ++i) if(_this.thoughtGraph.nodes[i].conversation.hash == conv.hash) _this.thoughtGraph.nodes.splice(i--, 1);
-			for(var i=0; i<_this.thoughtGraph.links.length; ++i) if(_this.thoughtGraph.links[i].conversation.hash == conv.hash) _this.thoughtGraph.links.splice(i--, 1);
+			for(var i=0; i<_this.thoughtGraph.links.length; ++i) if(_this.doesLinkBelongToConversation(_this.thoughtGraph.links[i], conv)) _this.thoughtGraph.links.splice(i--, 1);
 			
 			_this.conversationThoughtsRemoved.raise(conv);
+		}
+		
+		this.doesLinkBelongToConversation = function(link, conv) {
+			if(link.global)
+				return hashEquals(link.sourceConversation, conv) || hashEquals(link.targetConversation, conv);
+			else
+				return hashEquals(link.conversation, conv);
 		}
 		
 		function addConversationThoughts(conv, nodes, links) {
@@ -486,7 +499,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 	            .data(ABSTR.graph.links)
 	            .enter().append("line")
 	            .attr("class", "link")
-	            .style("stroke", '#444')
+	            .style("stroke", '#888')
 	            .style("stroke-width", 5)
 				.style("stroke-dasharray", '8,6')
 				.style("stroke-linecap", "round")
@@ -533,7 +546,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 			//source: http://bl.ocks.org/mbostock/7881887
 			var quadtree = d3.geom.quadtree(ABSTR.graph.nodes);
 			ABSTR.graph.nodes.forEach(function(d) {
-				var r = 2 * liveAttributes.conversationRadius(d) + 20;
+				var r = 2 * liveAttributes.conversationRadius(d) + 40;
 				var left = d.x - r, right = d.x + r, top = d.y - r, bottom = d.y + r;
 				quadtree.visit(function(quad, x1, y1, x2, y2) {
 					if(quad.point && quad.point !== d) {
@@ -541,14 +554,16 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 						var dy = quad.point.y - d.y;
 						var distance = Math.sqrt(dx*dx+dy*dy);
 						var minDistance = liveAttributes.conversationRadius(d) + liveAttributes.conversationRadius(quad.point) + 20;
-						var forceDistance = minDistance;
+						var forceDistance = minDistance + 40;
+						var mass = liveAttributes.conversationRadius(quad.point)*liveAttributes.conversationRadius(quad.point);
+						mass /= liveAttributes.conversationRadius(d)*liveAttributes.conversationRadius(d) + liveAttributes.conversationRadius(quad.point)*liveAttributes.conversationRadius(quad.point);
 						if(distance < minDistance) {
 							var factor = (distance-minDistance)/distance / 2;
 							if(liveAttributes.conversationRadius(d) == liveAttributes.conversationRadius(quad.point)) factor /= 2;
-							d.x += (dx *= factor);
-							d.y += (dy *= factor);
-							quad.point.x -= dx;
-							quad.point.y -= dy;
+							d.x += 2*mass*(dx *= factor);
+							d.y += 2*mass*(dy *= factor);
+							quad.point.x -= 2*(1-mass)*dx;
+							quad.point.y -= 2*(1-mass)*dy;
 						}
 						else if(distance < forceDistance) {
 							var factor = (distance-forceDistance)/distance * alpha / 6;
@@ -816,7 +831,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		function removeLinks(conv) {
-			objects.links.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
+			objects.links.filter(function(d) { return ABSTR.doesLinkBelongToConversation(d, conv) }).remove();
 		}
 		
 		function removeNodes(conv) {
@@ -1296,7 +1311,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		this.linkDistance = function(d) {
-			return d.global ? 100 : 75;
+			return d.global ? 75 : 75;
 		}
 		
 		this.linkStrength = function(d) {
@@ -1304,7 +1319,7 @@ function(PacBuilder, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, 
 		}
 		
 		this.replyLink = function(d) {
-			return d.direct == 0;
+			return d.direct == 0 || d.global;
 		}
 		
 		this.borderMode = function(d) {
