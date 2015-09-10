@@ -1,5 +1,5 @@
-define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/d3-group-charge', 'conversation-graph/d3-drag-with-listeners', 'conversation-graph/util'], 
-function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, GroupCharge, Drag, Util) {
+define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/util'], 
+function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, Util) {
 	function ConversationGraphVis() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -187,6 +187,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 				promise.resolve({ nodes: model.nodes, links: links, incomingGlobalLinks: model.incomingGlobalLinks, outgoingGlobalLinks: model.outgoingGlobalLinks  })
 			})
 			.fail(function(error) {
+				console.log(error, d);
 				d.loading = false;
 				d.error = error;
 				_this.graph.conversationLoadingStateChanged.raise(d);
@@ -269,7 +270,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 		
 		function initThoughtPresentation() {
-			thoughtPresentation = new ConversationGraph_ThoughtPresentation(ABSTR, { container: svgContainer });
+			thoughtPresentation = new ConversationGraph.ThoughtPresentation(ABSTR.graph, { svg: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
 			thoughtPresentation.init();
 		}
 		
@@ -335,313 +336,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		this.$ = function() {
 			return $tooltip;
 		}
-	}
-	
-	function ConversationGraph_ThoughtPresentation(ABSTR, svgData) {
-		var _this = this;
-		
-		this.init = function() {
-			ABSTR.graph.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
-			
-			ABSTR.graph.conversationThoughtsAdded.subscribe(onConversationThoughtsAdded);
-			ABSTR.graph.createdConversationThoughtAdded.subscribe(onCreatedConversationThoughtAdded);
-			ABSTR.graph.conversationThoughtsRemoved.subscribe(onConversationThoughtsRemoved);
-			
-			ABSTR.graph.conversationPositionsChanged.subscribe(this.startEvolution);
-			
-			tooltip = new Tooltip($('#tooltip'));
-			
-			force = d3.layout.force()
-				.charge(0)
-				.gravity(0)
-				.linkDistance(thoughtLiveAttributes.linkDistance)
-				.linkStrength(thoughtLiveAttributes.linkStrength)
-				.theta(0.95)
-				.friction(0.85)
-				.size([width, height])
-				.nodes(ABSTR.graph.thoughtGraph.nodes)
-				.links(ABSTR.graph.thoughtGraph.links);
-				
-			drawLinks();
-			drawLinkArrows();
-			drawNodes();
-				
-			force.on('tick', onTick);
-			_this.startEvolution();
-		}
-		
-		function onConversationThoughtsAdded() {
-			drawLinks();
-			drawNodes();
-			_this.startEvolution();
-		}
-		
-		function onCreatedConversationThoughtAdded(args) {
-			//args = { conversation; node; link; }
-			explode(args.node.x, args.node.y, thoughtLiveAttributes.nodeColor(args.node));
-		}
-		
-		function onConversationThoughtsRemoved(conv) {
-			removeLinks(conv);
-			removeNodes(conv);
-		}
-		
-		function explode(x, y, color) {
-			explosion = svgData.container.append('circle')
-				.attr('class', 'explosion')
-				.attr("cx", x)
-		        .attr("cy", y)
-		        .attr("r", 10)
-				.style("stroke",color)
-				.style('stroke-width', '1px')
-				.style('stroke-opacity', 0.9)
-			explosion.transition().ease('cubic-out').duration(1500)
-				.attr('r', 450)
-				.style('stroke-width', '10px')
-				.style('stroke-opacity', 0)
-				.remove();
-		}
-		
-		this.startEvolution = function() {
-			force.start();
-		}
-		
-		function onLinkClicked(d) {
-			ABSTR.graph.selection.select({ type: ConversationGraph.SelectionTypes.ThoughtLink, item: d });
-		}
-		
-		function onNodeClicked(d) {
-			ABSTR.graph.selection.select({ type: ConversationGraph.SelectionTypes.Thought, item: d });
-		}
-		
-		function onSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelectionChanged(args.value.item);
-			else if(args.oldValue.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelectionChanged(null);
-			
-			if(args.value.type == ConversationGraph.SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(args.value.item);
-			else if(args.oldValue.type == ConversationGraph.SelectionTypes.ThoughtLink) onThoughtLinkSelectionChanged(null);
-		}
-		
-		function onThoughtSelectionChanged(d) {
-			updateNodeAttributes();
-		}
-		
-		function onThoughtLinkSelectionChanged(d) {
-			updateLinkBorder();
-		}
-		
-		function onMouseEnter(d) {
-			if(dragging) return;
-			ABSTR.graph.mouseOver.select({ type: ConversationGraph.SelectionTypes.Thought, item: d });
-			updateNodeAttributes();
-			
-			var $node = $(objects.nodes.filter(function(d2) { return d.hash == d2.hash })[0]);
-			
-			tooltip.$().text(thoughtLiveAttributes.summary(d));
-			tooltip.showTooltipAt$Node($node);
-		}
-		
-		function onMouseLeave(d) {
-			if(dragging) return;
-			ABSTR.graph.mouseOver.clear();
-			
-			tooltip.hideTooltip();
-			updateNodeAttributes();
-		}
-		
-		function onMouseEnterLink(d) {
-			ABSTR.graph.mouseOver.select({ type: ConversationGraph.SelectionTypes.ThoughtLink, item: d });
-		}
-		
-		function onMouseLeaveLink(d) {
-			ABSTR.graph.mouseOver.clear();
-		}
-		
-		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.ThoughtLink) onMouseOverLinkChanged(args.value.item);
-			else if(args.oldValue.type == ConversationGraph.SelectionTypes.ThoughtLink) onMouseOverLinkChanged(null);
-		}
-		
-		function onMouseOverLinkChanged(d) {
-			updateLinkBorder();
-		}
-		
-		function updateLinkBorder() {
-			var over = ABSTR.graph.mouseOver.item();
-			var sel = ABSTR.graph.selection.item();
-			var active = [];
-			var inactive = [];
-			if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.ThoughtLink && sel)
-				active.push({ linkBorder: objects.selectedLinkBorder, d: sel })
-			else inactive.push(objects.selectedLinkBorder);
-			if(ABSTR.graph.mouseOver.type() == ConversationGraph.SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
-				active.push({ linkBorder: objects.mouseOverLinkBorder, d: over });
-			else inactive.push(objects.mouseOverLinkBorder);
-			
-			
-			active.forEach(function(item) {
-				item.linkBorder
-					.attr('x1', item.d.source.x)
-					.attr('y1', item.d.source.y)
-					.attr('x2', item.d.target.x)
-					.attr('y2', item.d.target.y)
-			})
-			inactive.forEach(function(linkBorder) {
-				linkBorder
-					.attr('x1', 0)
-					.attr('y1', 0)
-					.attr('x2', 0)
-					.attr('y2', 0)
-			});
-		}
-		
-		function removeLinks(conv) {
-			objects.links.filter(function(d) { return ABSTR.graph.doesLinkBelongToConversation(d, conv) }).remove();
-		}
-		
-		function removeNodes(conv) {
-			objects.nodes.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
-		}
-		
-		function drawLinks() {
-			if(!objects.mouseOverLinkBorder)
-				objects.mouseOverLinkBorder = svgData.container.append('line')
-					.attr('class', 'thought-overlink')
-					.style('stroke', '#c32222') //TODO: unify borderColors
-			if(!objects.selectedLinkBorder)
-				objects.selectedLinkBorder = svgData.container.append('line')
-					.attr('class', 'thought-selectedlink')
-					.style('stroke', '#333') //TODO: unify borderColors
-			
-			//if(objects.links) objects.links.remove();
-			objects.newLinks = svgData.container.selectAll('.thought-link')
-				.data(ABSTR.graph.thoughtGraph.links)
-				.enter().insert('line', '.thought-node')
-				.attr('class', 'thought-link')
-				.on('click', onLinkClicked)
-				.call(mouseEnterLeave(onMouseEnterLink, onMouseLeaveLink))
-			objects.newLinks
-				.filter(thoughtLiveAttributes.replyLink)
-				.attr('marker-start', 'url(#thought-arrow)')
-			objects.newLinks
-				.filter(notFn(thoughtLiveAttributes.replyLink))
-				.attr('marker-start', 'url(#thought-invertedarrow)')
-			objects.links = svgData.container.selectAll('.thought-link');
-				
-			updateLinkAttributes();
-		}
-		
-		function drawLinkArrows() {
-			if(objects.linkArrows) objects.linkArrows.remove();
-			if(objects.invertedLinkArrows) objects.invertedLinkArrows.remove();
-			objects.linkArrows = svgData.container.append("defs").append("marker")
-				.attr("id", "thought-arrow")
-				.attr("class", "thought-arrowmarker")
-				// Displacement to put the arrow in the middle of the link
-				.attr("refX", -3)
-				.attr("refY", 0.45)
-				.attr("markerWidth", 5)
-				.attr("markerHeight", 5)
-				.attr("orient", "auto")
-				.append("path")
-				.attr("d", " M 4 0 Q 0 0.45 4 0.9 Q 0.8 0.45 4 0");
-				  // This is the form of the arrow. It starts in the point (y,x)=(4,0), it draws a quadratic Bézier curve to (4,0.9) with control point (0,0.45)
-				  // and then another Bézier back to (4,0) with (0.8,0.45) as the control point
-				  
-			objects.invertedLinkArrows = svgData.container.append("defs").append("marker")
-				.attr("id", "thought-invertedarrow")
-				.attr("class", "thought-arrowmarker")
-				.attr("refX", -6) 
-				.attr("refY", 0.45)
-				.attr("markerWidth", 5)
-				.attr("markerHeight", 5)
-				.attr("orient", "auto")
-				.append("path")
-				.attr("d", " M 0 0 Q 4 0.45 0 0.9 Q 3.2 0.45 0 0");
-		}
-		
-		function updateLinkAttributes() {
-			objects.links
-				.style('stroke', thoughtLiveAttributes.linkColor)
-		}
-		
-		function drawNodes() {
-			var drag = Drag.drag(function(dragBehavior) {
-				dragBehavior.on('drag.incoma', function(d) { onMouseLeave(d); dragging = true; });
-				dragBehavior.on('dragend.incoma', function(d) { dragging = false; });
-			}, force);
-			
-			//if(objects.nodes) objects.nodes.remove();
-			objects.newNodes = svgData.container.selectAll('.thought-node')
-				.data(ABSTR.graph.thoughtGraph.nodes)
-				.enter().append('circle')
-				.attr('class', 'thought-node')
-				.on('click', onNodeClicked)
-				.call(mouseEnterLeave(onMouseEnter, onMouseLeave))
-				.call(drag)
-			objects.nodes = svgData.container.selectAll('.thought-node');
-			updateNodeAttributes();
-		}
-		
-		function updateNodeAttributes() {
-			objects.nodes
-				.attr('r', 15)
-				.attr('data-bordermode', thoughtLiveAttributes.borderMode)
-				.style('fill', thoughtLiveAttributes.nodeColor)
-		}
-		
-		function onTick(e) {
-			gravity(e.alpha);
-			charge(e.alpha, 0.95);
-			
-			objects.nodes
-				.attr('cx', function(d) { return d.x })
-				.attr('cy', function(d) { return d.y })
-			objects.links
-				.attr('x1', function(d) { return d.source.x })
-				.attr('y1', function(d) { return d.source.y })
-				.attr('x2', function(d) { return d.target.x })
-				.attr('y2', function(d) { return d.target.y })
-				
-			updateLinkBorder();
-		}
-		
-		function gravity(alpha) {
-			for(var i in ABSTR.graph.thoughtGraph.nodes) {
-				var d = ABSTR.graph.thoughtGraph.nodes[i];
-				var factor = 0.2;
-				var dist = Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2);
-				var conversationRadius = liveAttributes.conversationRadius(d.conversation) * 0.95;
-					dist = Math.sqrt(dist);
-				if(dist >= conversationRadius) {
-					factor += (dist-conversationRadius)/dist*(2+0.2/alpha);
-				}
-				d.x += (d.conversation.x - d.x)*factor*(alpha);
-				d.y += (d.conversation.y - d.y)*factor*(alpha);
-			}
-		}
-		
-		function charge(alpha, theta) {
-			var nodeGroups = {};
-			for(var i=0; i<ABSTR.graph.thoughtGraph.nodes.length; ++i) {
-				var node = ABSTR.graph.thoughtGraph.nodes[i];
-				var group = nodeGroups[node.conversation.hash] = nodeGroups[node.conversation.hash] || [];
-				group.push(node);
-			}
-			for(var hash in nodeGroups) {
-				GroupCharge.applyCharge(nodeGroups[hash], alpha, theta, function() { return -500 });
-			}
-		}
-		
-		var width = $(window).width();
-		var height = $(window).height();
-		var force;
-		var objects = { nodes: null, links: null };
-		var tooltip;
-		var liveAttributes = new ConversationGraph.ConversationLiveAttributes(ABSTR);
-		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
-		var dragging = false;
 	}
 	
 	function ConversationGraph_Control() {
@@ -771,7 +465,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			$('#contbox').append($node);
 		}
 		
-		var thoughtLiveAttributes = new ThoughtLiveAttributes(ABSTR);
+		var thoughtLiveAttributes = new ConversationGraph.ThoughtLiveAttributes(ABSTR.graph);
 		var replyOrLinkPanel = new ReplyOrLinkPanel_Presentation(ABSTR);
 	}
 	
@@ -899,49 +593,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		}
 	}
 	
-	function ThoughtLiveAttributes(ABSTR) {
-		var _this = this;
-		this.nodeColor = function(d) {
-			return nodeColor[d.type];
-		}
-		
-		this.linkColor = function(d) {
-			return linkColor[d.type];
-		}
-		
-		this.linkDistance = function(d) {
-			return d.global ? 75 : 75;
-		}
-		
-		this.linkStrength = function(d) {
-			return d.global ? 0.5 : 1;
-		}
-		
-		this.replyLink = function(d) {
-			return d.direct == 0 || d.global;
-		}
-		
-		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.graph.selection.item(),d)) return ConversationGraph.BorderModes.Selected;
-			else if(hashEquals(ABSTR.graph.mouseOver.item(), d)) return ConversationGraph.BorderModes.MouseOver;
-			else return ConversationGraph.BorderModes.None;
-		}
-		
-		this.summary = function(d) {
-			//TODO: fontStyle -> zoomout:3740
-			if(d.contentsum) return d.contentsum;
-			else {
-				if(d.content.length > 60) return '[' + d.content.slice(0, 60) + '...]';
-				else return '[' + d.content + ']';
-			}
-		}
-		
-		//CODE        = ["#000000", "General", "Questio", "Proposa", "Info   "];
-		var nodeColor = ["#000000", "#f9c8a4", "#a2b0e7", "#e7a2dd", "#bae59a"];
-		//CODE        = ["#000000", "General", "Agreeme", "Disagre", "Consequ", "Alterna", "Equival"]; 
-		var linkColor = ["#000000", "#f9c8a4", "#7adc7c", "#e85959", "#b27de8", "#c87b37", "#ecaa41"];
-	}
-	
 	var ThoughtTypes = {
 		General: 1,
 		Question: 2,
@@ -1045,10 +696,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 	function nl2br (str, is_xhtml) {   
 		var breakTag = (is_xhtml || typeof is_xhtml === 'undefined') ? '<br />' : '<br>';    
 		return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1'+ breakTag +'$2');
-	}
-	
-	function notFn(fn) {
-		return function() { return !fn.apply(this, arguments) };
 	}
 	
 	function setPropertiesTo(props, obj) {

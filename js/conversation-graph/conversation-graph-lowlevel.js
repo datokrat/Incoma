@@ -1,6 +1,6 @@
 define(
-['../event', '../conversation-graph/d3-drag-with-listeners', '../conversation-graph/util'],
-function(Events, Drag, Util) {
+['../event', '../conversation-graph/d3-drag-with-listeners', '../conversation-graph/util', '../conversation-graph/d3-group-charge'],
+function(Events, Drag, Util, GroupCharge) {
 	function ConversationGraph_Abstraction() {
 		this.graph = { links: [], nodes: [] };
 		this.thoughtGraph = { links: [], nodes: [] };
@@ -83,7 +83,7 @@ function(Events, Drag, Util) {
 		this._tooltip = args.tooltip;
 		this._force = null;
 		this._objects = { };
-		this._liveAttributes = new LiveAttributes(ABSTR);
+		this._liveAttributes = new ConversationLiveAttributes(ABSTR);
 	}
 	
 	ConversationPresentation.prototype.init = function() {
@@ -92,8 +92,6 @@ function(Events, Drag, Util) {
 		this._ABSTR.conversationLoadingStateChanged.subscribe(bind(this, '_onConversationLoadingStateChanged'));
 		
 		this._ABSTR.conversationListChanged.subscribe(bind(this, '_onConversationListChanged'));
-		
-		console.log(this._ABSTR);
 		
 		this._force = d3.layout.force()
 			.charge(this._liveAttributes.charge)
@@ -105,8 +103,6 @@ function(Events, Drag, Util) {
 			.size([this._size.width, this._size.height])
 			.nodes(this._ABSTR.graph.nodes)
 			.links(this._ABSTR.graph.links);
-		
-		console.log(1);
 			
 		this._objects.links = this._svg.selectAll('.link')
             .data(this._ABSTR.graph.links)
@@ -121,14 +117,10 @@ function(Events, Drag, Util) {
 		this._objects.nodes = this._svg.selectAll(".node")
 			.data(this._ABSTR.graph.nodes)
 			.enter().append('g');
-			
-		console.log(2);
 		
 		this._bindNodeEvents();
 		this._bindForceEvents();
 		this._startWithFreshAttributes();
-		
-		console.log(3);
 	}
 	
 	ConversationPresentation.prototype._bindNodeEvents = function() {
@@ -150,7 +142,7 @@ function(Events, Drag, Util) {
 	}
 	
 	ConversationPresentation.prototype._onConversationListChanged = function() {
-		this._showWithFreshAttributes();
+		this._startWithFreshAttributes();
 	}
 	
 	ConversationPresentation.prototype._onConversationLoadingStateChanged = function() {
@@ -318,7 +310,324 @@ function(Events, Drag, Util) {
         	.style('fill', 'red')
 	}
 	
-	function LiveAttributes(ABSTR) {
+	var ThoughtPresentation = function ConversationGraph_ThoughtPresentation(ABSTR, args) {
+		this._ABSTR = ABSTR;
+		this._svg = args.svg;
+		this._size = args.size;
+		this._tooltip = args.tooltip;
+		this._dragging = false;
+		this._force = null;
+		this._objects = { };
+		this._liveAttributes = new ThoughtLiveAttributes(ABSTR);
+		this._conversationLiveAttributes = new ConversationLiveAttributes(ABSTR);
+	}
+	
+	ThoughtPresentation.prototype.init = function() {
+		this._ABSTR.selection.selectionChanged.subscribe(bind(this, '_onSelectionChanged'));
+		this._ABSTR.mouseOver.selectionChanged.subscribe(bind(this, '_onMouseOverSelectionChanged'));
+		
+		this._ABSTR.conversationThoughtsAdded.subscribe(bind(this, '_onConversationThoughtsAdded'));
+		this._ABSTR.createdConversationThoughtAdded.subscribe(bind(this, '_onCreatedConversationThoughtAdded'));
+		this._ABSTR.conversationThoughtsRemoved.subscribe(bind(this, '_onConversationThoughtsRemoved'));
+		
+		this._ABSTR.conversationPositionsChanged.subscribe(bind(this, '_startEvolution'));
+		
+		this._force = d3.layout.force()
+			.charge(0)
+			.gravity(0)
+			.linkDistance(this._liveAttributes.linkDistance)
+			.linkStrength(this._liveAttributes.linkStrength)
+			.theta(0.95)
+			.friction(0.85)
+			.size([this._size.width, this._size.height])
+			.nodes(this._ABSTR.thoughtGraph.nodes)
+			.links(this._ABSTR.thoughtGraph.links);
+			
+		this._initLinkArrows();
+		this._initLinkBorders();
+		
+		this._drawNewLinks();
+		this._drawNewNodes();
+		
+		this._bindForceEvents();
+	}
+	
+	ThoughtPresentation.prototype._startWithFreshAttributes = function() {
+		this._applyNodeAttributes(this._objects.nodes);
+		this._applyLinkAttributes(this._objects.links);
+		this._startEvolution();
+	}
+		
+	ThoughtPresentation.prototype._onConversationThoughtsAdded = function() {
+		this._drawNewLinks();
+		this._drawNewNodes();
+		this._applyLinkAttributes(this._objects.newLinks);
+		this._applyNodeAttributes(this._objects.newNodes);
+		this._startEvolution();
+	}
+	
+	ThoughtPresentation.prototype._onCreatedConversationThoughtAdded = function(args) {
+		//args = { conversation; node; link; }
+		this._explode(args.node.x, args.node.y, this._liveAttributes.nodeColor(args.node));
+	}
+	
+	ThoughtPresentation.prototype._onConversationThoughtsRemoved = function(conv) {
+		this._removeLinks(conv);
+		this._removeNodes(conv);
+	}
+	
+	ThoughtPresentation.prototype._explode = function(x, y, color) {
+		var explosion = this._svg.append('circle')
+			.attr('class', 'explosion')
+			.attr("cx", x)
+	        .attr("cy", y)
+	        .attr("r", 10)
+			.style("stroke", color)
+			.style('stroke-width', '1px')
+			.style('stroke-opacity', 0.9)
+		explosion.transition().ease('cubic-out').duration(1500)
+			.attr('r', 450)
+			.style('stroke-width', '10px')
+			.style('stroke-opacity', 0)
+			.remove();
+	}
+	
+	ThoughtPresentation.prototype._removeLinks = function(conv) {
+		var self = this;
+		this._objects.links.filter(function(d) { return self._ABSTR.doesLinkBelongToConversation(d, conv) }).remove();
+	}
+	
+	ThoughtPresentation.prototype._removeNodes = function(conv) {
+		this._objects.nodes.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
+	}
+
+	ThoughtPresentation.prototype._startEvolution = function() {
+		this._force.start();
+	}
+	
+	/* === Events === */
+		
+		ThoughtPresentation.prototype._onLinkClicked = function(d) {
+			this._ABSTR.selection.select({ type: SelectionTypes.ThoughtLink, item: d });
+		}
+		
+		ThoughtPresentation.prototype._onNodeClicked = function(d) {
+			this._ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
+		}
+		
+		ThoughtPresentation.prototype._onSelectionChanged = function(args) {
+			if(args.value.type == SelectionTypes.Thought) this._onThoughtSelectionChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.Thought) this._onThoughtSelectionChanged(null);
+			
+			if(args.value.type == SelectionTypes.ThoughtLink) this._onThoughtLinkSelectionChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.ThoughtLink) this._onThoughtLinkSelectionChanged(null);
+		}
+		
+		ThoughtPresentation.prototype._onThoughtSelectionChanged = function(d) {
+			this._applyNodeAttributes(this._objects.nodes);
+		}
+		
+		ThoughtPresentation.prototype._onThoughtLinkSelectionChanged = function(d) {
+			this._applyLinkBorder();
+		}
+		
+		ThoughtPresentation.prototype._onMouseEnter = function(d) {
+			if(this._dragging) return;
+			this._ABSTR.mouseOver.select({ type: SelectionTypes.Thought, item: d });
+			this._applyNodeAttributes(this._objects.nodes);
+			
+			var $node = $(this._objects.nodes.filter(function(d2) { return hashEquals(d, d2) })[0]);
+			
+			this._tooltip.$().text(this._liveAttributes.summary(d));
+			this._tooltip.showTooltipAt$Node($node);
+		}
+		
+		ThoughtPresentation.prototype._onMouseLeave = function(d) {
+			if(this._dragging) return;
+			this._ABSTR.mouseOver.clear();
+			
+			this._tooltip.hideTooltip();
+			this._applyNodeAttributes(this._objects.nodes);
+		}
+		
+		ThoughtPresentation.prototype._onMouseEnterLink = function(d) {
+			this._ABSTR.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
+		}
+		
+		ThoughtPresentation.prototype._onMouseLeaveLink = function(d) {
+			this._ABSTR.mouseOver.clear();
+		}
+		
+		ThoughtPresentation.prototype._onMouseOverSelectionChanged = function(args) {
+			if(args.value.type == SelectionTypes.ThoughtLink) this._onMouseOverLinkChanged(args.value.item);
+			else if(args.oldValue.type == SelectionTypes.ThoughtLink) this._onMouseOverLinkChanged(null);
+		}
+		
+		ThoughtPresentation.prototype._onMouseOverLinkChanged = function(d) {
+			this._applyLinkBorder();
+		}
+	
+	/* === End Events === */
+	
+	ThoughtPresentation.prototype._initLinkArrows = function() {
+		if(!this._objects.linkArrows) this._objects.linkArrows = this._svg.append("defs").append("marker")
+			.attr("id", "thought-arrow")
+			.attr("class", "thought-arrowmarker")
+			// Displacement to put the arrow in the middle of the link
+			.attr("refX", -3)
+			.attr("refY", 0.45)
+			.attr("markerWidth", 5)
+			.attr("markerHeight", 5)
+			.attr("orient", "auto")
+			.append("path")
+			.attr("d", " M 4 0 Q 0 0.45 4 0.9 Q 0.8 0.45 4 0");
+			  // This is the form of the arrow. It starts in the point (y,x)=(4,0), it draws a quadratic Bézier curve to (4,0.9) with control point (0,0.45)
+			  // and then another Bézier back to (4,0) with (0.8,0.45) as the control point
+			  
+		if(!this._objects.invertedLinkArrows) this._objects.invertedLinkArrows = this._svg.append("defs").append("marker")
+			.attr("id", "thought-invertedarrow")
+			.attr("class", "thought-arrowmarker")
+			.attr("refX", -6) 
+			.attr("refY", 0.45)
+			.attr("markerWidth", 5)
+			.attr("markerHeight", 5)
+			.attr("orient", "auto")
+			.append("path")
+			.attr("d", " M 0 0 Q 4 0.45 0 0.9 Q 3.2 0.45 0 0");
+	}
+	
+	ThoughtPresentation.prototype._initLinkBorders = function() {
+		if(!this._objects.mouseOverLinkBorder)
+			this._objects.mouseOverLinkBorder = this._svg.append('line')
+				.attr('class', 'thought-overlink')
+				.style('stroke', '#c32222') //TODO: unify borderColors
+		if(!this._objects.selectedLinkBorder)
+			this._objects.selectedLinkBorder = this._svg.append('line')
+				.attr('class', 'thought-selectedlink')
+				.style('stroke', '#333') //TODO: unify borderColors
+	}
+		
+	ThoughtPresentation.prototype._drawNewLinks = function() {
+		this._objects.newLinks = this._svg.selectAll('.thought-link')
+			.data(this._ABSTR.thoughtGraph.links)
+			.enter().insert('line', '.thought-node')
+			.attr('class', 'thought-link')
+			.on('click', bind(this, '_onLinkClicked'))
+			.call(mouseEnterLeave(bind(this, '_onMouseEnterLink'), bind(this, '_onMouseLeaveLink')))
+			
+		this._applyLinkAttributes(this._objects.newLinks);
+			
+		this._objects.links = this._svg.selectAll('.thought-link');
+	}
+	
+	ThoughtPresentation.prototype._applyLinkAttributes = function(selection) {
+		selection
+			.style('stroke', this._liveAttributes.linkColor)
+		selection.filter(this._liveAttributes.replyLink)
+			.attr('marker-start', 'url(#thought-arrow)')
+		selection.filter(notFn(this._liveAttributes.replyLink))
+			.attr('marker-start', 'url(#thought-invertedarrow)')
+		
+		this._applyLinkBorder();
+	}
+	
+	ThoughtPresentation.prototype._applyLinkBorder = function() {
+		var over = this._ABSTR.mouseOver.item();
+		var sel = this._ABSTR.selection.item();
+		var active = [];
+		
+		if(this._ABSTR.selection.type() == SelectionTypes.ThoughtLink && sel)
+			active.push({ linkBorder: this._objects.selectedLinkBorder, d: sel })
+		if(this._ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
+			active.push({ linkBorder: this._objects.mouseOverLinkBorder, d: over });
+		
+		[this._objects.selectedLinkBorder, this._objects.mouseOverLinkBorder].forEach(function(linkBorder) {
+			linkBorder
+				.attr('x1', 0)
+				.attr('y1', 0)
+				.attr('x2', 0)
+				.attr('y2', 0)
+		});
+		active.forEach(function(item) {
+			item.linkBorder
+				.attr('x1', item.d.source.x)
+				.attr('y1', item.d.source.y)
+				.attr('x2', item.d.target.x)
+				.attr('y2', item.d.target.y)
+		})
+	}
+	
+	ThoughtPresentation.prototype._drawNewNodes = function() {
+		var self = this;
+		var drag = Drag.drag(function(dragBehavior) {
+			dragBehavior.on('drag.incoma', function(d) { self._onMouseLeave(d); self._dragging = true; });
+			dragBehavior.on('dragend.incoma', function(d) { self._dragging = false; });
+		}, this._force);
+		
+		this._objects.newNodes = this._svg.selectAll('.thought-node')
+			.data(this._ABSTR.thoughtGraph.nodes)
+			.enter().append('circle')
+			.attr('class', 'thought-node')
+			.on('click', bind(this, '_onNodeClicked'))
+			.call(mouseEnterLeave(bind(this, '_onMouseEnter'), bind(this, '_onMouseLeave')))
+			.call(drag)
+		this._objects.nodes = this._svg.selectAll('.thought-node');
+	}
+	
+	ThoughtPresentation.prototype._applyNodeAttributes = function(selection) {
+		selection
+			.attr('r', 15)
+			.attr('data-bordermode', this._liveAttributes.borderMode)
+			.style('fill', this._liveAttributes.nodeColor)
+	}
+	
+	ThoughtPresentation.prototype._bindForceEvents = function() {
+		this._force.on('tick', bind(this, '_onTick'));
+	}
+	
+	ThoughtPresentation.prototype._onTick = function(e) {
+	
+		this._gravity(e.alpha);
+		this._charge(e.alpha, 0.95);
+		
+		this._objects.nodes
+			.attr('cx', function(d) { return d.x })
+			.attr('cy', function(d) { return d.y })
+		this._objects.links
+			.attr('x1', function(d) { return d.source.x })
+			.attr('y1', function(d) { return d.source.y })
+			.attr('x2', function(d) { return d.target.x })
+			.attr('y2', function(d) { return d.target.y })
+	}
+	
+	ThoughtPresentation.prototype._gravity = function(alpha) {
+		var liveAttributes = this._conversationLiveAttributes;
+		for(var i in this._ABSTR.thoughtGraph.nodes) {
+			var d = this._ABSTR.thoughtGraph.nodes[i];
+			var factor = 0.2;
+			var dist = Math.sqrt(Math.pow(d.conversation.x-d.x,2)+Math.pow(d.conversation.y-d.y,2));
+			var conversationRadius = liveAttributes.conversationRadius(d.conversation) * 0.95;
+			if(dist >= conversationRadius) {
+				factor += (dist-conversationRadius)/dist*(2+0.2/alpha);
+			}
+			d.x += (d.conversation.x - d.x)*factor*alpha;
+			d.y += (d.conversation.y - d.y)*factor*alpha;
+		}
+	}
+	
+	ThoughtPresentation.prototype._charge = function(alpha, theta) {
+		var nodeGroups = {};
+		for(var i=0; i<this._ABSTR.thoughtGraph.nodes.length; ++i) {
+			var node = this._ABSTR.thoughtGraph.nodes[i];
+			var group = nodeGroups[node.conversation.hash] = nodeGroups[node.conversation.hash] || [];
+			group.push(node);
+		}
+		for(var hash in nodeGroups) {
+			GroupCharge.applyCharge(nodeGroups[hash], alpha, theta, function() { return -500 });
+		}
+	}
+
+	function ConversationLiveAttributes(ABSTR) {
 		var self = this;
 		
 		expansionDependentAttribute('conversationRadius');
@@ -386,6 +695,49 @@ function(Events, Drag, Util) {
 		}
 	}
 	
+	function ThoughtLiveAttributes(ABSTR) {
+		var _this = this;
+		this.nodeColor = function(d) {
+			return nodeColor[d.type];
+		}
+		
+		this.linkColor = function(d) {
+			return linkColor[d.type];
+		}
+		
+		this.linkDistance = function(d) {
+			return d.global ? 75 : 75;
+		}
+		
+		this.linkStrength = function(d) {
+			return d.global ? 0.5 : 1;
+		}
+		
+		this.replyLink = function(d) {
+			return d.direct == 0 || d.global;
+		}
+		
+		this.borderMode = function(d) {
+			if(hashEquals(ABSTR.selection.item(),d)) return BorderModes.Selected;
+			else if(hashEquals(ABSTR.mouseOver.item(), d)) return BorderModes.MouseOver;
+			else return BorderModes.None;
+		}
+		
+		this.summary = function(d) {
+			//TODO: fontStyle -> zoomout:3740
+			if(d.contentsum) return d.contentsum;
+			else {
+				if(d.content.length > 60) return '[' + d.content.slice(0, 60) + '...]';
+				else return '[' + d.content + ']';
+			}
+		}
+		
+		//CODE        = ["#000000", "General", "Questio", "Proposa", "Info   "];
+		var nodeColor = ["#000000", "#f9c8a4", "#a2b0e7", "#e7a2dd", "#bae59a"];
+		//CODE        = ["#000000", "General", "Agreeme", "Disagre", "Consequ", "Alterna", "Equival"]; 
+		var linkColor = ["#000000", "#f9c8a4", "#7adc7c", "#e85959", "#b27de8", "#c87b37", "#ecaa41"];
+	}
+	
 	var SelectionTypes = {
 		Conversation: 0,
 		Thought: 1,
@@ -405,7 +757,6 @@ function(Events, Drag, Util) {
 	}
 	
 	function bind(_this, fnName) {
-		console.log(fnName);
 		return _this[fnName].bind(_this);
 	}
 	
@@ -425,10 +776,16 @@ function(Events, Drag, Util) {
 		}
 	}
 	
+	function notFn(fn) {
+		return function() { return !fn.apply(this, arguments) };
+	}
+	
 	return {
 		Abstraction: ConversationGraph_Abstraction, 
 		ConversationPresentation: ConversationPresentation, 
-		ConversationLiveAttributes: LiveAttributes,
+		ThoughtPresentation: ThoughtPresentation, 
+		ConversationLiveAttributes: ConversationLiveAttributes,
+		ThoughtLiveAttributes: ThoughtLiveAttributes,
 		BorderModes: BorderModes,
 		SelectionTypes: SelectionTypes };
 });

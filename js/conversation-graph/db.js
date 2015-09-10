@@ -59,7 +59,6 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 	
 	Db.getmodel = function(onNoConversation){
 	//Get the conversation from the DB
-
 		$.ajax({
 		dataType: 'json',
 		url: 'php/getmodel.php',
@@ -67,8 +66,8 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 		async: false,
 		}).done(function(data) {
 
-		data.nodes.pop();
-		data.links.pop();
+		//data.nodes.pop();
+		//data.links.pop();
             
         if (data.nodes == ""){
 			onNoConversation(); //opennoconversationpanel();
