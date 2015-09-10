@@ -20,15 +20,13 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		this.graph = new ConversationGraph.Abstraction();
 		this.rightPanel = new RightPanel.Abstraction(this);
 		
-		this.inputPanelChanged = new Events.EventImpl();
+		//this.inputPanelChanged = new Events.EventImpl();
 		
-		this.thoughtType = new Util.Selection();
-		this.thoughtLinkType = new Util.Selection();
-		
-		this.inputPanel = "none";
+		//this.inputPanel = "none";
 		this.saving = createObservable(false);
 		
 		this.init = function() {
+			this.rightPanel.init();
 			this.graph.conversationExpanded.subscribe(onConversationExpanded);
 			
 			loadConversationList()
@@ -44,7 +42,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			_this.graph.addToConversationGraph(nodes, links);
 		}
 		
-		this.openCloseReplyPanel = function(open) {
+		/*this.openCloseReplyPanel = function(open) {
 			if(open) _this.inputPanel = "reply";
 			else _this.inputPanel = "none";
 			_this.inputPanelChanged.raise();
@@ -56,7 +54,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			else _this.inputPanel = "none";
 			_this.inputPanelChanged.raise();
 			_this.thoughtLinkType.reselect({ item: ConversationGraph.ThoughtLinkTypes.General });
-		}
+		}*/
 		
 		this.saveThought = function(args) {
 			if(_this.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return;
@@ -66,8 +64,8 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			var error = function(err) { _this.saving(false); alert(Webtext.tx_an_error + ' ' + err) };
 			
 			var replyTo = _this.graph.selection.item();
-			var thoughtType = _this.thoughtType.item();
-			var linkType = _this.thoughtLinkType.item();
+			var thoughtType = args.thoughtType; //_this.thoughtType.item();
+			var linkType = args.linkType; //_this.thoughtLinkType.item();
 			
 			var newLinks = [];
 			var newNodes = [];

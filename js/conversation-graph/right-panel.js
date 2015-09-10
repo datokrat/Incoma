@@ -7,10 +7,14 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		this.shownItemChanged = new Events.EventImpl();
 		this.savingStateChanged = new Events.EventImpl();
 		
+		this.thoughtType = new Util.Selection();
+		this.thoughtLinkType = new Util.Selection();
+		
 		this.inputPanelMode = InputPanelModes.None;
 		this.shown = { kindOfSelection: KindsOfSelection.None, type: ConversationGraph.SelectionTypes.None, item: null };
 	
 		this.init = function() {
+			console.log('init');
 			PARENT.graph.selection.selectionChanged.subscribe(onSelectionChanged);
 			PARENT.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 			PARENT.saving.changed.subscribe(function() { _this.savingStateChanged.raise(PARENT.saving()) });
@@ -30,6 +34,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function onSelectionChanged(args) {
+			console.log('onSelectionChanged');
 			setInputPanelMode(InputPanelModes.None);
 			_this.inputPanelReset.raise();
 			
@@ -41,7 +46,8 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function updateShownItem() {
-			if(isItemSelected(mouseOverSelection) && !hashEquals(mouseOverSelection.item(), selection.item()))
+			console.log('updateShownItem');
+			if(isItemSelected(mouseOverSelection) && !Util.hashEquals(mouseOverSelection.item(), selection.item()) && !mouseOverSelection.item().expanded)
 				showMouseOverItem();
 			else if(isItemSelected(selection))
 				showSelectedItem();
@@ -49,12 +55,12 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 				showNothing();
 		}
 		
-		function showSelection() {
+		function showSelectedItem() {
 			_this.shown = { kindOfSelection: KindsOfSelection.Selected, type: selection.type(), item: selection.item() };
 			_this.shownItemChanged.raise();
 		}
 		
-		function showMouseOver() {
+		function showMouseOverItem() {
 			_this.shown = { kindOfSelection: KindsOfSelection.MouseOver, type: mouseOverSelection.type(), item: mouseOverSelection.item() };
 			_this.shownItemChanged.raise();
 		}
@@ -65,9 +71,9 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function setInputPanelMode(value) {
-			if(this.inputPanelMode == value) return;
-			this.inputPanelMode = value;
-			this.inputPanelModeChanged.raise();
+			if(_this.inputPanelMode == value) return;
+			_this.inputPanelMode = value;
+			_this.inputPanelModeChanged.raise();
 		}
 		
 		function isItemSelected(selection) {
@@ -112,7 +118,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			$('#showconnect').click(ABSTR.openCloseLinkPanel.bind(ABSTR, true));
 			$('#showeditnode').attr('title', Webtext.tx_edit_thought);
 			
-			//clear();
+			clear();
 			
 			replyPanel.init();
 			linkPanel.init();
@@ -131,6 +137,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}*/
 		
 		function onShownItemChanged() {
+			console.log('onShownItemChanged');
 			clear();
 			applyKindOfSelection();
 			applyContents();
@@ -138,18 +145,21 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function applyKindOfSelection() {
+			console.log('applyKindOfSelection');
 			$('#right_bar_header #contentlabel').attr('data-bordermode', getBorderMode());
 		}
 		
 		function applyContents() {
+			console.log('applyContents');
 			switch(ABSTR.shown.type) {
 				case ConversationGraph.SelectionTypes.Conversation: applyConversationContents(); break;
-				case ConversationGraph.SelectionTypes.Thought: applyThoughtContent(); break;
+				case ConversationGraph.SelectionTypes.Thought: applyThoughtContents(); break;
 				default: clear();
 			}
 		}
 		
 		function applyInputPanel() {
+			console.log('applyInputPanel');
 			if(ABSTR.shown.kindOfSelection == ConversationGraph.BorderModes.Selected && ABSTR.shown.type == ConversationGraph.SelectionTypes.Thought) {
 				$('#showreply, #showconnect').show();
 			}
@@ -289,7 +299,8 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function onChanged() {
-			if(ABSTR.inputPanel == "reply") open();
+			console.log('onChanged', ABSTR.inputPanelMode);
+			if(ABSTR.inputPanelMode == InputPanelModes.Reply) open();
 			else close();
 		}
 		
@@ -341,7 +352,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		var self = this;
 		
 		this.init = function() {
-			ABSTR.inputPanelChanged.subscribe(applyInputPanelState);
+			ABSTR.inputPanelModeChanged.subscribe(applyInputPanelState);
 			applyInputPanelState();
 			
 			initCaptions();
