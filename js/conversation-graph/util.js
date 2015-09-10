@@ -11,7 +11,7 @@ define(['../event'], function(Events) {
 		this.reselect = function(_sel) {
 			var old = Selection.clone(sel);
 			Selection.clone(_sel, sel);
-			_this.selectionChanged.raise({ oldValue: old, value: sel, typeChanged: function(type) {
+			_this.selectionChanged.raise({ oldValue: old, value: sel, somethingSelected: sel.item != null, typeChanged: function(type) {
 				return sel.type == type || old.type == type;
 			} });
 		}
@@ -45,5 +45,11 @@ define(['../event'], function(Events) {
 		return x.type == y.type && x.item == y.item;
 	}
 	
-	return { Selection: Selection };
+	function hashEquals(x, y) {
+		if(x == y) return true;
+		if(!x || !y) return false;
+		return x.hash == y.hash;
+	}
+	
+	return { Selection: Selection, hashEquals: hashEquals };
 })

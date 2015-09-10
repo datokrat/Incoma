@@ -61,9 +61,9 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ConversationGraph_Abstraction.prototype.doesLinkBelongToConversation = function(link, conv) {
 		if(link.global)
-			return hashEquals(link.sourceConversation, conv) || hashEquals(link.targetConversation, conv);
+			return Util.hashEquals(link.sourceConversation, conv) || Util.hashEquals(link.targetConversation, conv);
 		else
-			return hashEquals(link.conversation, conv);
+			return Util.hashEquals(link.conversation, conv);
 	}
 		
 	ConversationGraph_Abstraction.prototype.addGlobalLink = function(sourceConv, targetConv, link) {
@@ -158,7 +158,7 @@ function(Events, Drag, Util, GroupCharge) {
 		if(!d.expanded) {
 			this._tooltip.$().text(d.title);
 			
-			var $node = $(this._objects.nodes.filter(function(d2) { return hashEquals(d, d2) })[0]);
+			var $node = $(this._objects.nodes.filter(function(d2) { return Util.hashEquals(d, d2) })[0]);
 			this._tooltip.showTooltipAt$Node($node);
 		}
 	}
@@ -398,7 +398,7 @@ function(Events, Drag, Util, GroupCharge) {
 	}
 	
 	ThoughtPresentation.prototype._removeNodes = function(conv) {
-		this._objects.nodes.filter(function(d) { return hashEquals(conv, d.conversation) }).remove();
+		this._objects.nodes.filter(function(d) { return Util.hashEquals(conv, d.conversation) }).remove();
 	}
 
 	ThoughtPresentation.prototype._startEvolution = function() {
@@ -436,7 +436,7 @@ function(Events, Drag, Util, GroupCharge) {
 			this._ABSTR.mouseOver.select({ type: SelectionTypes.Thought, item: d });
 			this._applyNodeAttributes(this._objects.nodes);
 			
-			var $node = $(this._objects.nodes.filter(function(d2) { return hashEquals(d, d2) })[0]);
+			var $node = $(this._objects.nodes.filter(function(d2) { return Util.hashEquals(d, d2) })[0]);
 			
 			this._tooltip.$().text(this._liveAttributes.summary(d));
 			this._tooltip.showTooltipAt$Node($node);
@@ -538,7 +538,7 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		if(this._ABSTR.selection.type() == SelectionTypes.ThoughtLink && sel)
 			active.push({ linkBorder: this._objects.selectedLinkBorder, d: sel })
-		if(this._ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !hashEquals(sel, over))
+		if(this._ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !Util.hashEquals(sel, over))
 			active.push({ linkBorder: this._objects.mouseOverLinkBorder, d: over });
 		
 		[this._objects.selectedLinkBorder, this._objects.mouseOverLinkBorder].forEach(function(linkBorder) {
@@ -644,8 +644,8 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selection.item(SelectionTypes.Conversation), d)) return BorderModes.Selected;
-			else if(hashEquals(ABSTR.mouseOver.item(SelectionTypes.Conversation), d) && !d.expanded) return BorderModes.MouseOver;
+			if(Util.hashEquals(ABSTR.selection.item(SelectionTypes.Conversation), d)) return BorderModes.Selected;
+			else if(Util.hashEquals(ABSTR.mouseOver.item(SelectionTypes.Conversation), d) && !d.expanded) return BorderModes.MouseOver;
 			else return BorderModes.None;
 		}
 		
@@ -718,8 +718,8 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		this.borderMode = function(d) {
-			if(hashEquals(ABSTR.selection.item(),d)) return BorderModes.Selected;
-			else if(hashEquals(ABSTR.mouseOver.item(), d)) return BorderModes.MouseOver;
+			if(Util.hashEquals(ABSTR.selection.item(),d)) return BorderModes.Selected;
+			else if(Util.hashEquals(ABSTR.mouseOver.item(), d)) return BorderModes.MouseOver;
 			else return BorderModes.None;
 		}
 		
@@ -750,10 +750,21 @@ function(Events, Drag, Util, GroupCharge) {
 		MouseOver: 'mouseover',
 	};
 	
-	function hashEquals(x, y) {
-		if(x == y) return true;
-		if(!x || !y) return false;
-		return x.hash == y.hash;
+	var ThoughtTypes = {
+		General: 1,
+		Question: 2,
+		Proposal: 3,
+		Info: 4,
+	};
+	
+	var ThoughtLinkTypes = {
+		General: 1,
+		Agreement: 2,
+		Disagreement: 3,
+		Consequence: 4,
+		Alternative: 5,
+		Equivalence: 6,
+		None: 0,
 	}
 	
 	function bind(_this, fnName) {
@@ -787,5 +798,8 @@ function(Events, Drag, Util, GroupCharge) {
 		ConversationLiveAttributes: ConversationLiveAttributes,
 		ThoughtLiveAttributes: ThoughtLiveAttributes,
 		BorderModes: BorderModes,
-		SelectionTypes: SelectionTypes };
+		SelectionTypes: SelectionTypes,
+		ThoughtTypes: ThoughtTypes,
+		ThoughtLinkTypes: ThoughtLinkTypes
+	};
 });

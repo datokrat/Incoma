@@ -1,5 +1,5 @@
-define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'datetime', 'scaler', 'model', 'conversation-graph/util'], 
-function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, Model, Util) {
+define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'scaler', 'model', 'conversation-graph/util', 'conversation-graph/right-panel'], 
+function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util, RightPanel) {
 	function ConversationGraphVis() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -18,6 +18,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 	function ConversationGraph_Abstraction() {
 		var _this = this;
 		this.graph = new ConversationGraph.Abstraction();
+		this.rightPanel = new RightPanel.Abstraction(this);
 		
 		this.inputPanelChanged = new Events.EventImpl();
 		
@@ -47,7 +48,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			if(open) _this.inputPanel = "reply";
 			else _this.inputPanel = "none";
 			_this.inputPanelChanged.raise();
-			_this.thoughtType.reselect({ item: ThoughtTypes.General });
+			_this.thoughtType.reselect({ item: ConversationGraph.ThoughtTypes.General });
+		}
+		
+		this.openCloseLinkPanel = function(open) {
+			if(open) _this.inputPanel = "link";
+			else _this.inputPanel = "none";
+			_this.inputPanelChanged.raise();
+			_this.thoughtLinkType.reselect({ item: ConversationGraph.ThoughtLinkTypes.General });
 		}
 		
 		this.saveThought = function(args) {
@@ -83,14 +91,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 			        advevalby: [[],[],[],[]],
 			        type: thoughtType,
 			        author: _this.userName,
-					seed: (linkType == ThoughtLinkTypes.None) ? 1 : 0,
+					seed: (linkType == ConversationGraph.ThoughtLinkTypes.None) ? 1 : 0,
 			        time: timeSeconds,
 			        x: replyTo.x + randomPlusMinus()*10*(Math.random()+1),
 			        y: replyTo.y + randomPlusMinus()*10*(Math.random()+1)
 				};
 				newNodes.push(newThought);
 				
-				if(linkType != ThoughtLinkTypes.None) {
+				if(linkType != ConversationGraph.ThoughtLinkTypes.None) {
 					var newLink = {
 						hash: hash, 
 						source: newThought, 
@@ -187,7 +195,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 				promise.resolve({ nodes: model.nodes, links: links, incomingGlobalLinks: model.incomingGlobalLinks, outgoingGlobalLinks: model.outgoingGlobalLinks  })
 			})
 			.fail(function(error) {
-				console.log(error, d);
 				d.loading = false;
 				d.error = error;
 				_this.graph.conversationLoadingStateChanged.raise(d);
@@ -290,7 +297,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 		function initHtmlBoundObjects() {
 			tooltip = new Tooltip($('#tooltip'));
 			
-			rightPanel = new RightPanel_Presentation(ABSTR);
+			rightPanel = new RightPanel.Presentation(ABSTR.rightPanel);
 			rightPanel.init();
 		}
 		
@@ -340,367 +347,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, DateTime, Scaler, M
 	
 	function ConversationGraph_Control() {
 		this.init = function() {}
-	}
-	
-	function RightPanel_Presentation(ABSTR) {
-		this.init = function() {
-			ABSTR.graph.selection.selectionChanged.subscribe(onSelectionChanged);
-			ABSTR.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
-			ABSTR.inputPanelChanged.subscribe(onInputPanelChanged);
-			ABSTR.saving.changed.subscribe(onSavingStateChanged);
-			
-			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
-			$(".right_bar").resizable({
-				handles: 'w, s',
-				minWidth: 335,
-	  			resize: function() {
-					$(this).css("left", 0);
-				}
-			});
-			
-			$('#saving').hide();
-			$('#showreply').text(Webtext.tx_reply);
-			$('#showreply').click(ABSTR.openCloseReplyPanel.bind(ABSTR, true));
-			$('#showconnect').text(Webtext.tx_connect);
-			$('#showeditnode').attr('title', Webtext.tx_edit_thought);
-			
-			clear();
-			
-			replyOrLinkPanel.init();
-		}
-		
-		function onInputPanelChanged() {
-			var showHide = function($n, b) { b ? $n.show() : $n.hide() };
-			showHide($('#showreply'), ABSTR.inputPanel != 'reply');
-			showHide($('#showconnect'), ABSTR.inputPanel != 'connect');
-		}
-		
-		function onSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(args.value.item);
-			else if(args.value.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(args.value.item);
-			else if(args.value.type == null) clear();
-		}
-		
-		function onConversationSelected(d) {
-			clear();
-			if(d) {
-				onSomethingSelected();
-				$('#right_bar_header #contentlabel .right_bar_title_main').text(d.title);
-			
-				$('#contbox').html('');
-				appendLineToContent(d.thoughtnum + ' ' + Webtext.tx_thoughts);
-				appendLineToContent('created: ' + DateTime.timeAgo(d.creationtime));
-				appendLineToContent(Webtext.tx_activity +": " + DateTime.timeAgo(d.lasttime));
-				appendLineToContent(Webtext.tx_language + ": " + d.language);
-			}
-		}
-		
-		function onThoughtSelected(d) {
-			clear();
-			if(d) {
-				onSomethingSelected();
-				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
-				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
-			
-				$('#contbox').html('');
-				appendLineToContent(URLlinks(nl2br(d.content)));
-				
-				$('#showreply, #showconnect').show();
-			}
-		}
-		
-		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(args.value.item);
-			else if(args.oldValue.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(null);
-		}
-		
-		function onMouseOverThoughtChanged(d) {
-			if(d && !hashEquals(ABSTR.graph.selection.item(), d)) {
-				clear();
-				$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.MouseOver);
-				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
-				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
-			
-				$('#contbox').html('');
-				appendLineToContent(URLlinks(nl2br(d.content)));
-			}
-			else {
-				showSelected();
-			}
-		}
-		
-		function showSelected() {
-			clear();
-			if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(ABSTR.graph.selection.item());
-			else if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(ABSTR.graph.selection.item());
-		}
-		
-		function onSomethingSelected() {
-			$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.Selected);
-		}
-		
-		function clear() {
-			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
-			$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.None);
-			$('#right_bar_header #contentlabel *').html('');
-			$('#contbox').html('');
-			$('#showreply, #showconnect, #showeditnode').hide();
-		}
-		
-		function onSavingStateChanged(state) {
-			if(state) {
-				$('#saving').show();
-			}
-			else {
-				$('#saving').fadeOut(300);
-			}
-		}
-		
-		function appendLineToContent(text) {
-			var line = $('<span></span>'); line.html(text+'<br />');
-			appendNodeToContent(line);
-		}
-		
-		function appendNodeToContent($node) {
-			$('#contbox').append($node);
-		}
-		
-		var thoughtLiveAttributes = new ConversationGraph.ThoughtLiveAttributes(ABSTR.graph);
-		var replyOrLinkPanel = new ReplyOrLinkPanel_Presentation(ABSTR);
-	}
-	
-	function ReplyOrLinkPanel_Presentation(ABSTR) {
-		var _this = this;
-		
-		this.init = function() {
-			ABSTR.inputPanelChanged.subscribe(onChanged);
-			ABSTR.thoughtType.selectionChanged.subscribe(onThoughtTypeChanged);
-			
-			onChanged();
-			
-			$('.tx_type_reply').text(Webtext.tx_type_reply);
-			$('.tx_type_connection').text(Webtext.tx_type_connection);
-			$('.tx_summary_reply').text(Webtext.tx_summary_reply);
-			$('#savenode').text(Webtext.tx_save);
-			$('#savenode').click(onClickSaveNode);
-			
-			initDropDowns();
-		}
-		
-		function initDropDowns() {
-			thoughtTypeDropDown = new DdSlick();
-			thoughtTypeDropDown.selectionChanged.subscribe(ABSTR.thoughtType.selectTypeFn());
-			setPropertiesTo({
-				$nodeFn: function() { return $('#replynodetype') },
-				text: Webtext.tx_type_reply,
-				elementIds: Object.keys(ThoughtTypes).map(function(key) { return ThoughtTypes[key] }),
-				elementAttributes: ThoughtTypeAttributes,
-				selectedId: ThoughtTypes.General
-			}, thoughtTypeDropDown);
-			
-			thoughtLinkTypeDropDown = new DdSlick();
-			thoughtLinkTypeDropDown.selectionChanged.subscribe(ABSTR.thoughtLinkType.selectTypeFn());
-			setPropertiesTo({
-				$nodeFn: function() { return $('#replylinktype') },
-				text: Webtext.tx_type_connect,
-				elementIds: Object.keys(ThoughtLinkTypes).map(function(key) { return ThoughtLinkTypes[key] }),
-				elementAttributes: ThoughtLinkTypeAttributes,
-				selectedId: ThoughtLinkTypes.General
-			}, thoughtLinkTypeDropDown);
-		}
-		
-		function onChanged() {
-			if(ABSTR.inputPanel == "reply") openReplyPanel();
-			else closeReplyPanel();
-		}
-		
-		function openReplyPanel() {
-			thoughtTypeDropDown.prepare();
-			$('#replypanel').show();
-		}
-		
-		function closeReplyPanel() {
-			$('#replypanel').hide();
-			$('#replybox').val('');
-			$('#replyboxsum').val('');
-		}
-		
-		function onThoughtTypeChanged() {
-			prepareThoughtLinkTypeDropDown();
-		}
-		
-		function prepareThoughtLinkTypeDropDown() {
-			thoughtLinkTypeDropDown.elementIds = AllowedThoughtLinkTypes[ABSTR.thoughtType.item()];
-			thoughtLinkTypeDropDown.prepare();
-		}
-		
-		function onClickSaveNode() {
-			//make sure no necessary field is empty
-			if($('#replybox').val() == '') {
-				replyAlert(Webtext.tx_write_something + '!');
-				return;
-			}
-			
-			ABSTR.saveThought({
-				content: $('#replybox').val(),
-				summary: $('#replyboxsum').val()
-			})
-		}
-		
-		function replyAlert(text) {
-				var alert = $('#replyalert');
-				alert(text) = text;
-				$('#replybox').highlight(2000);
-				setTimeout(function() { alert.html('&nbsp;') }, 2000);
-		}
-		
-		var thoughtTypeDropDown = null;
-		var thoughtLinkTypeDropDown = null;
-	}
-	
-	function DdSlick() {
-		var _this = this;
-		
-		this.$nodeFn = null;
-		this.elementIds = [];
-		this.elementAttributes = [];
-		this.text = null;
-		
-		this.selectedId = null;
-		this.selectionChanged = new Events.EventImpl();
-		
-		this.prepare = function() {
-			var data = _this.elementIds.map(function(id) {
-				var elementAttributes = _this.elementAttributes[id];
-				return {
-					text: elementAttributes.name,
-					value: elementAttributes.value,
-					selected: elementAttributes.value == _this.selectedId,
-					imageSrc: elementAttributes.image
-				}
-			});
-			_this.$nodeFn().ddTslick('destroy');
-			_this.$nodeFn().ddTslick({
-				data: data,
-				selectText: _this.text,
-				width: 135,
-				height:25*(_this.elementIds.length),
-				background: "#fff",
-				onSelected: function(args){
-					_this.selectionChanged.raise(args.selectedData.value);
-				}
-			});
-		}
-	}
-	
-	var ThoughtTypes = {
-		General: 1,
-		Question: 2,
-		Proposal: 3,
-		Info: 4,
-	};
-	var ThoughtTypeAttributes = {};
-	ThoughtTypeAttributes[ThoughtTypes.General] = { name: Webtext.tx_general };
-	ThoughtTypeAttributes[ThoughtTypes.Question] = { name: Webtext.tx_question };
-	ThoughtTypeAttributes[ThoughtTypes.Proposal] = { name: Webtext.tx_proposal };
-	ThoughtTypeAttributes[ThoughtTypes.Info] = { name: Webtext.tx_info };
-	for(var typeId in ThoughtTypeAttributes) {
-		var attributes = ThoughtTypeAttributes[typeId];
-		attributes.value = typeId;
-		attributes.image = 'img/node'+typeId+'.png';
-	}
-	
-	var ThoughtLinkTypes = {
-		General: 1,
-		Agreement: 2,
-		Disagreement: 3,
-		Consequence: 4,
-		Alternative: 5,
-		Equivalence: 6,
-		None: 0,
-	}
-	var ThoughtLinkTypeAttributes = {};
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.General] = { name: Webtext.tx_general };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.Agreement] = { name: Webtext.tx_agreement };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.Disagreement] = { name: Webtext.tx_disagreement };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.Consequence] = { name: Webtext.tx_consequence };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.Alternative] = { name: Webtext.tx_alternative };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.Equivalence] = { name: Webtext.tx_equivalence };
-	ThoughtLinkTypeAttributes[ThoughtLinkTypes.None] = { name: Webtext.tx_norelation };
-	for(var typeId in ThoughtLinkTypeAttributes) {
-		var attributes = ThoughtLinkTypeAttributes[typeId];
-		attributes.value = typeId;
-		attributes.image = 'img/link'+typeId+'.png';
-	}
-	
-	var AllowedThoughtLinkTypes = arrayToObject([
-		ThoughtTypes.General, values(ThoughtLinkTypes),
-		ThoughtTypes.Question, [ThoughtLinkTypes.General, ThoughtLinkTypes.None],
-		ThoughtTypes.Proposal, [ThoughtLinkTypes.General, ThoughtLinkTypes.Alternative, ThoughtLinkTypes.None],
-		ThoughtTypes.Info, values(ThoughtLinkTypes)
-	]);
-	
-	function arrayToObject(arr) {
-		var obj = {};
-		for(var i=0; i<arr.length-1; i+=2)
-			obj[arr[i]]=arr[i+1];
-		return obj;
-	}
-	
-	function values(obj) {
-		return Object.keys(obj).map(function(k) { return obj[k] });
-	}
-	
-	//converts from hex color to rgba color; TODO: duplicate -> visualisation-zoomout.js
-	function hex2rgb(hex, opacity) {
-	        var h=hex.replace('#', '');
-	        h =  h.match(new RegExp('(.{'+h.length/3+'})', 'g'));
-	
-	        for(var i=0; i<h.length; i++)
-	            h[i] = parseInt(h[i].length==1? h[i]+h[i]:h[i], 16);
-	
-	        if (typeof opacity != 'undefined')  h.push(opacity);
-	
-	        return 'rgba('+h.join(',')+')';
-	}
-	
-	function mouseEnterLeave(enter, leave) {
-		var over = false;
-		return function(node) {
-			node.on('mouseover', function(d) {
-				if(over) return;
-				over = true;
-				enter(d);
-			});
-			node.on('mouseout', function(d) {
-				if(!over) return;
-				over = false;
-				leave(d);
-			});
-		}
-	}
-	
-	function hashEquals(x, y) {
-		if(x == y) return true;
-		if(!x || !y) return false;
-		return x.hash == y.hash;
-	}
-	
-	//replace multiple URLs inside a string in html links
-	function URLlinks(text) {
-	    var exp = /(\b(https?|ftp|file):\/\/[-A-Z0-9é-ú+&@#\/%?=~_|!:,.;]*[-A-Z0-9é-ú+&@#\/%=~_|])/ig;
-	    return text.replace(exp,"<a href='$1' target='_blank'>$1</a>");
-	}
-	
-	//replace line breaks with <br> html tags
-	function nl2br (str, is_xhtml) {   
-		var breakTag = (is_xhtml || typeof is_xhtml === 'undefined') ? '<br />' : '<br>';    
-		return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1'+ breakTag +'$2');
-	}
-	
-	function setPropertiesTo(props, obj) {
-		for(var key in props)
-			obj[key] = props[key];
 	}
 	
 	return ConversationGraphVis;
