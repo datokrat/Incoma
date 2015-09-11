@@ -9,12 +9,15 @@ function(Events, Drag, Util, GroupCharge) {
 		this.conversationThoughtsRemoved = new Events.EventImpl();
 		this.createdConversationThoughtAdded = new Events.EventImpl();
 		this.conversationExpanded = new Events.EventImpl();
+		this.conversationCollapsed = new Events.EventImpl();
 		
 		this.conversationLoadingStateChanged = new Events.EventImpl();
 		this.conversationPositionsChanged = new Events.EventImpl();
 		
 		this.selection = new Util.Selection();
 		this.mouseOver = new Util.Selection();
+		
+		this.connecting = Util.createObservable(false);
 	}
 	
 	ConversationGraph_Abstraction.prototype.clearSelection = function() {
@@ -28,8 +31,10 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		if(d.expanded)
 			this.conversationExpanded.raise(d);
-		else
+		else {
 			this.removeConversationThoughts(d); //TODO: what happens when collapsing whilst loading?
+			this.conversationCollapsed.raise(d);
+		}
 	}
 	
 	ConversationGraph_Abstraction.prototype.addToConversationGraph = function(nodes, links) {
@@ -78,7 +83,7 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	var ConversationPresentation = function ConversationGraph_ConversationPresentation(ABSTR, args) {
 		this._ABSTR = ABSTR;
-		this._svg = args.svg;
+		this._container = args.svg;
 		this._size = args.size;
 		this._tooltip = args.tooltip;
 		this._force = null;
@@ -90,6 +95,8 @@ function(Events, Drag, Util, GroupCharge) {
 		this._ABSTR.selection.selectionChanged.subscribe(bind(this, '_onSelectionChanged'));
 		this._ABSTR.mouseOver.selectionChanged.subscribe(bind(this, '_onMouseOverSelectionChanged'));
 		this._ABSTR.conversationLoadingStateChanged.subscribe(bind(this, '_onConversationLoadingStateChanged'));
+		this._ABSTR.conversationExpanded.subscribe(bind(this, '_onConversationExpanded'));
+		this._ABSTR.conversationCollapsed.subscribe(bind(this, '_onConversationCollapsed'));
 		
 		this._ABSTR.conversationListChanged.subscribe(bind(this, '_onConversationListChanged'));
 		
@@ -104,7 +111,7 @@ function(Events, Drag, Util, GroupCharge) {
 			.nodes(this._ABSTR.graph.nodes)
 			.links(this._ABSTR.graph.links);
 			
-		this._objects.links = this._svg.selectAll('.link')
+		this._objects.links = this._container.selectAll('.link')
             .data(this._ABSTR.graph.links)
             .enter().append("line")
             .attr("class", "link")
@@ -114,23 +121,60 @@ function(Events, Drag, Util, GroupCharge) {
 			.style("stroke-linecap", "round")
 			.style("stroke-opacity", 1);
 		
-		this._objects.nodes = this._svg.selectAll(".node")
+		this._container.append('g').attr('class', 'after-expanded-conversations');
+		this._container.append('g').attr('class', 'after-prelink');
+		this._container.append('g').attr('class', 'after-collapsed-conversations');
+		
+		this._objects.nodes = this._container.selectAll(".conv-node")
 			.data(this._ABSTR.graph.nodes)
-			.enter().append('g');
+			.enter().insert('g', '.after-collapsed-conversations').attr('class', 'conv-node');
 		
 		this._bindNodeEvents();
 		this._bindForceEvents();
 		this._startWithFreshAttributes();
 	}
 	
-	ConversationPresentation.prototype._bindNodeEvents = function() {
+	ConversationPresentation.prototype._onConversationExpanded = function(d) {
+		this._objects.nodes = this._container.selectAll('.conv-node');
+		var collapsedExit = this._container.selectAll('.conv-node:not([data-expanded])')
+			.data(this._ABSTR.graph.nodes.filter(function(d) { return !d.expanded }))
+			.exit().remove();
+		var expandedEnter = this._container.selectAll('.conv-node[data-expanded]')
+			.data(this._ABSTR.graph.nodes.filter(function(d) { return d.expanded }))
+			.enter().insert('g', '.after-expanded-conversations').attr('class', 'conv-node').attr('data-expanded', true);
+		
+		this._bindNodeEvents(expandedEnter);
+			
+		/*dom = this._objects.nodes.filter(function(d2) { return Util.hashEquals(d, d2) }).remove();
+		this._container.select(function() { return this.insertBefore(dom.node(), this.querySelector('.after-expanded-conversations')) });*/
+		this._objects.nodes = this._container.selectAll('.conv-node');
+		this._startWithFreshAttributes();
+	}
+	
+	ConversationPresentation.prototype._onConversationCollapsed = function(d) {
+		this._objects.nodes = this._container.selectAll('.conv-node');
+		var expandedExit = this._container.selectAll('.conv-node[data-expanded]')
+			.data(this._ABSTR.graph.nodes.filter(function(d) { return d.expanded }))
+			.exit().remove();
+		var collapsedEnter = this._container.selectAll('.conv-node:not([data-expanded])')
+			.data(this._ABSTR.graph.nodes.filter(function(d) { return !d.expanded }))
+			.enter().insert('g', '.after-collapsed-conversations').attr('class', 'conv-node').attr('data-expanded', false);
+		
+		this._bindNodeEvents(collapsedEnter);
+			
+		this._objects.nodes = this._container.selectAll('.conv-node');
+		this._startWithFreshAttributes();
+	}
+	
+	ConversationPresentation.prototype._bindNodeEvents = function(nodes) {
 		var self = this;
 		var drag = Drag.drag(function(dragBehavior) {
 			dragBehavior.on('drag.incoma', function(d) { self._onMouseLeaveConversation(d); self._dragging = true; });
 			dragBehavior.on('dragend.incoma', function(d) { self._dragging = false; });
 		}, this._force);
 		
-		this._objects.nodes
+		nodes = nodes || this._objects.nodes;
+		nodes
 			.on('click', this._ABSTR.selection.selectTypeFn(SelectionTypes.Conversation))
 			.on('dblclick', bind(this, '_onDblClickConversation'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnterConversation'), bind(this, '_onMouseLeaveConversation')))
@@ -172,7 +216,7 @@ function(Events, Drag, Util, GroupCharge) {
 		
 	ConversationPresentation.prototype._onDblClickConversation = function(d) {
 			this._ABSTR.expandConversation(d);
-			this._startWithFreshAttributes(); //TODO: right position?
+			//this._startWithFreshAttributes(); //TODO: right position?
 	}
 	
 	/* === End Node Events === */
@@ -259,6 +303,7 @@ function(Events, Drag, Util, GroupCharge) {
 	ConversationPresentation.prototype._applyNodeAttributes = function(parent) {
 		parent.selectAll('*').remove();
 		parent
+            //.attr('data-expanded', function(d) { return d.expanded })
             .append("circle")
             .attr("class", "conv node")
             .attr("r", this._liveAttributes.conversationRadius)
@@ -312,9 +357,12 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	var ThoughtPresentation = function ConversationGraph_ThoughtPresentation(ABSTR, args) {
 		this._ABSTR = ABSTR;
+		this._container = args.container;
 		this._svg = args.svg;
 		this._size = args.size;
 		this._tooltip = args.tooltip;
+		this._scaler = args.scaler;
+		this._bg = args.bg;
 		this._dragging = false;
 		this._force = null;
 		this._objects = { };
@@ -331,6 +379,7 @@ function(Events, Drag, Util, GroupCharge) {
 		this._ABSTR.conversationThoughtsRemoved.subscribe(bind(this, '_onConversationThoughtsRemoved'));
 		
 		this._ABSTR.conversationPositionsChanged.subscribe(bind(this, '_startEvolution'));
+		this._ABSTR.connecting.changed.subscribe(bind(this, '_onConnectingStateChanged'));
 		
 		this._force = d3.layout.force()
 			.charge(0)
@@ -345,10 +394,12 @@ function(Events, Drag, Util, GroupCharge) {
 			
 		this._initLinkArrows();
 		this._initLinkBorders();
+		this._initPreLink();
 		
 		this._drawNewLinks();
 		this._drawNewNodes();
 		
+		this._bindSvgEvents();
 		this._bindForceEvents();
 	}
 	
@@ -377,7 +428,7 @@ function(Events, Drag, Util, GroupCharge) {
 	}
 	
 	ThoughtPresentation.prototype._explode = function(x, y, color) {
-		var explosion = this._svg.append('circle')
+		var explosion = this._container.append('circle')
 			.attr('class', 'explosion')
 			.attr("cx", x)
 	        .attr("cy", y)
@@ -399,6 +450,9 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ThoughtPresentation.prototype._removeNodes = function(conv) {
 		this._objects.nodes.filter(function(d) { return Util.hashEquals(conv, d.conversation) }).remove();
+	}
+	
+	ThoughtPresentation.prototype._onConnectingStateChanged = function() {
 	}
 
 	ThoughtPresentation.prototype._startEvolution = function() {
@@ -470,7 +524,7 @@ function(Events, Drag, Util, GroupCharge) {
 	/* === End Events === */
 	
 	ThoughtPresentation.prototype._initLinkArrows = function() {
-		if(!this._objects.linkArrows) this._objects.linkArrows = this._svg.append("defs").append("marker")
+		if(!this._objects.linkArrows) this._objects.linkArrows = this._container.append("defs").append("marker")
 			.attr("id", "thought-arrow")
 			.attr("class", "thought-arrowmarker")
 			// Displacement to put the arrow in the middle of the link
@@ -484,7 +538,7 @@ function(Events, Drag, Util, GroupCharge) {
 			  // This is the form of the arrow. It starts in the point (y,x)=(4,0), it draws a quadratic Bézier curve to (4,0.9) with control point (0,0.45)
 			  // and then another Bézier back to (4,0) with (0.8,0.45) as the control point
 			  
-		if(!this._objects.invertedLinkArrows) this._objects.invertedLinkArrows = this._svg.append("defs").append("marker")
+		if(!this._objects.invertedLinkArrows) this._objects.invertedLinkArrows = this._container.append("defs").append("marker")
 			.attr("id", "thought-invertedarrow")
 			.attr("class", "thought-arrowmarker")
 			.attr("refX", -6) 
@@ -498,17 +552,31 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ThoughtPresentation.prototype._initLinkBorders = function() {
 		if(!this._objects.mouseOverLinkBorder)
-			this._objects.mouseOverLinkBorder = this._svg.append('line')
+			this._objects.mouseOverLinkBorder = this._container.append('line')
 				.attr('class', 'thought-overlink')
 				.style('stroke', '#c32222') //TODO: unify borderColors
 		if(!this._objects.selectedLinkBorder)
-			this._objects.selectedLinkBorder = this._svg.append('line')
+			this._objects.selectedLinkBorder = this._container.append('line')
 				.attr('class', 'thought-selectedlink')
 				.style('stroke', '#333') //TODO: unify borderColors
 	}
+	
+	ThoughtPresentation.prototype._initPreLink = function() {
+		if(!this._objects.preLink)
+			this._objects.preLink = this._container.insert("line", '.after-prelink')
+				.attr("x1", 0)
+				.attr("y1", 0)
+				.attr("x2", 0)
+				.attr("y2", 0)
+				.style("stroke-width", 3)
+				.style("stroke", "black")
+				.style("stroke-dasharray", "8,6")
+				.style("stroke-linecap", "round")
+				.style("stroke-opacity",1);
+	}
 		
 	ThoughtPresentation.prototype._drawNewLinks = function() {
-		this._objects.newLinks = this._svg.selectAll('.thought-link')
+		this._objects.newLinks = this._container.selectAll('.thought-link')
 			.data(this._ABSTR.thoughtGraph.links)
 			.enter().insert('line', '.thought-node')
 			.attr('class', 'thought-link')
@@ -517,7 +585,7 @@ function(Events, Drag, Util, GroupCharge) {
 			
 		this._applyLinkAttributes(this._objects.newLinks);
 			
-		this._objects.links = this._svg.selectAll('.thought-link');
+		this._objects.links = this._container.selectAll('.thought-link');
 	}
 	
 	ThoughtPresentation.prototype._applyLinkAttributes = function(selection) {
@@ -564,14 +632,14 @@ function(Events, Drag, Util, GroupCharge) {
 			dragBehavior.on('dragend.incoma', function(d) { self._dragging = false; });
 		}, this._force);
 		
-		this._objects.newNodes = this._svg.selectAll('.thought-node')
+		this._objects.newNodes = this._container.selectAll('.thought-node')
 			.data(this._ABSTR.thoughtGraph.nodes)
 			.enter().append('circle')
 			.attr('class', 'thought-node')
 			.on('click', bind(this, '_onNodeClicked'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnter'), bind(this, '_onMouseLeave')))
 			.call(drag)
-		this._objects.nodes = this._svg.selectAll('.thought-node');
+		this._objects.nodes = this._container.selectAll('.thought-node');
 	}
 	
 	ThoughtPresentation.prototype._applyNodeAttributes = function(selection) {
@@ -579,6 +647,26 @@ function(Events, Drag, Util, GroupCharge) {
 			.attr('r', 15)
 			.attr('data-bordermode', this._liveAttributes.borderMode)
 			.style('fill', this._liveAttributes.nodeColor)
+	}
+	
+	ThoughtPresentation.prototype._bindSvgEvents = function() {
+		this._svg.on('mousemove', bind(this, '_onMouseMove'));
+	}
+	
+	ThoughtPresentation.prototype._onMouseMove = function() {
+		if(/*this._ABSTR.connecting()*/this._ABSTR.selection.type() == SelectionTypes.Thought) {
+			console.log('!!!', this._scaler.translate(d3.mouse(d3.select('svg')[0][0])));
+			var p1 = [0,0], p2 = [0,0];
+			p1[0] = this._ABSTR.selection.item().x;
+			p1[1] = this._ABSTR.selection.item().y;
+			p2 = this._scaler.translate(d3.mouse(d3.select('svg')[0][0]));
+			this._objects.preLink
+				.attr('x1', p1[0])
+				.attr('y1', p1[1])
+				.attr('x2', p2[0])
+				.attr('y2', p2[1])
+				.style('stroke', 'blue');
+		}
 	}
 	
 	ThoughtPresentation.prototype._bindForceEvents = function() {

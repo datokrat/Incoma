@@ -253,12 +253,12 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 	    };
 		
 		function initConversationPresentation() {
-			conversationPresentation = new ConversationGraph.ConversationPresentation(ABSTR.graph, { svg: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
+			conversationPresentation = new ConversationGraph.ConversationPresentation(ABSTR.graph, { bg: bg, scaler: scaler, svg: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
 			conversationPresentation.init();
 		}
 		
 		function initThoughtPresentation() {
-			thoughtPresentation = new ConversationGraph.ThoughtPresentation(ABSTR.graph, { svg: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
+			thoughtPresentation = new ConversationGraph.ThoughtPresentation(ABSTR.graph, { bg: bg, scaler: scaler, svg: svg, container: svgContainer, tooltip: tooltip, size: { width: width, height: height } });
 			thoughtPresentation.init();
 		}
 		

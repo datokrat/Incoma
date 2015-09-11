@@ -15,7 +15,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		this.shown = { kindOfSelection: KindsOfSelection.None, type: ConversationGraph.SelectionTypes.None, item: null };
 	
 		this.init = function() {
-			console.log('init');
 			PARENT.graph.selection.selectionChanged.subscribe(onSelectionChanged);
 			PARENT.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
 		}
@@ -29,7 +28,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		this.isInputPanelVisible = function() {
-			console.log(_this.shown);
 			return _this.shown.type == ConversationGraph.SelectionTypes.Thought && _this.shown.kindOfSelection == KindsOfSelection.Selected;
 		}
 		
@@ -159,7 +157,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function showContents() {
-			console.log('applyContents');
 			switch(ABSTR.shown.type) {
 				case ConversationGraph.SelectionTypes.Conversation: showConversationContents(); break;
 				case ConversationGraph.SelectionTypes.Thought: showThoughtContents(); break;
@@ -168,7 +165,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function showHideInputPanelControls() {
-			console.log(ABSTR.isInputPanelVisible() ? 'ip visible' : 'ip invisible');
 			if(ABSTR.isInputPanelVisible())
 				applyInputPanelMode();
 			else
@@ -382,7 +378,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function show() {
-			console.log('show');
 			$('#linkpanel').show();
 		}
 		
