@@ -20,11 +20,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		this.graph = new ConversationGraph.Abstraction();
 		this.rightPanel = new RightPanel.Abstraction(this);
 		
-		//this.inputPanelChanged = new Events.EventImpl();
-		
-		//this.inputPanel = "none";
-		this.saving = createObservable(false);
-		
 		this.init = function() {
 			this.rightPanel.init();
 			this.graph.conversationExpanded.subscribe(onConversationExpanded);
@@ -57,11 +52,12 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		}*/
 		
 		this.saveThought = function(args) {
-			if(_this.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return;
+			var promise = new $.Deferred();
+			if(_this.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return promise.reject('select a thought');
 			
-			_this.saving(true);
 			var savePromise;
-			var error = function(err) { _this.saving(false); alert(Webtext.tx_an_error + ' ' + err) };
+			//var error = function(err) { _this.saving(false); alert(Webtext.tx_an_error + ' ' + err) };
+			var error = function(err) { promise.reject(err) };
 			
 			var replyTo = _this.graph.selection.item();
 			var thoughtType = args.thoughtType; //_this.thoughtType.item();
@@ -128,10 +124,8 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 				
 				_this.graph.addCreatedConversationThought(replyTo.conversation, newThought, newLink);
 				
-				_this.openCloseReplyPanel(false);
-				
 				savePromise.done(function() {
-					_this.saving(false);
+					promise.resolve();
 				});
 				
 				//TODO: elastic?
@@ -140,6 +134,8 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			.fail(function() {
 				//TODO
 			});
+			
+			return promise;
 		}
 		
 		function cloneObj(obj) {
@@ -225,19 +221,6 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		var conversationList = [], globalLinkList = [];
 		var hashLookup = [];
 		var conversationHashLookup = [];
-	}
-	
-	function createObservable(value) {
-		var savedValue = value;
-		var obs = function(val) {
-			if(val !== undefined && val !== savedValue) {
-				savedValue = val;
-				obs.changed.raise(savedValue);
-			}
-			return savedValue;
-		};
-		obs.changed = new Events.EventImpl();
-		return obs;
 	}
 	
 	function ConversationGraph_Presentation(ABSTR) {

@@ -5,10 +5,11 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		this.inputPanelReset = new Events.EventImpl();
 		this.inputPanelModeChanged = new Events.EventImpl();
 		this.shownItemChanged = new Events.EventImpl();
-		this.savingStateChanged = new Events.EventImpl();
 		
 		this.thoughtType = new Util.Selection();
 		this.thoughtLinkType = new Util.Selection();
+		
+		this.saving = Util.createObservable(false);
 		
 		this.inputPanelMode = InputPanelModes.None;
 		this.shown = { kindOfSelection: KindsOfSelection.None, type: ConversationGraph.SelectionTypes.None, item: null };
@@ -17,24 +18,45 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			console.log('init');
 			PARENT.graph.selection.selectionChanged.subscribe(onSelectionChanged);
 			PARENT.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
-			PARENT.saving.changed.subscribe(function() { _this.savingStateChanged.raise(PARENT.saving()) });
 		}
 		
-		this.openCloseReplyPanel = function() {
-			toggleInputPanelMode(InputPanelModes.Reply);
+		this.openCloseReplyPanel = function(value) {
+			toggleInputPanelMode(InputPanelModes.Reply, value);
 		}
 		
-		this.openCloseLinkPanel = function() {
-			toggleInputPanelMode(InputPanelModes.Link);
+		this.openCloseLinkPanel = function(value) {
+			toggleInputPanelMode(InputPanelModes.Link, value);
 		}
 		
-		function toggleInputPanelMode(mode) {
-			if(_this.inputPanelMode == mode) _this.inputPanelMode = InputPanelModes.None;
+		this.isInputPanelVisible = function() {
+			console.log(_this.shown);
+			return _this.shown.type == ConversationGraph.SelectionTypes.Thought && _this.shown.kindOfSelection == KindsOfSelection.Selected;
+		}
+		
+		function toggleInputPanelMode(mode, value) {
+			if(value === undefined) value = _this.inputPanelMode != mode;
+			if(!value) _this.inputPanelMode = InputPanelModes.None;
 			else _this.inputPanelMode = mode;
+			_this.inputPanelModeChanged.raise();
+		}
+		
+		this.saveThought = function(args) {
+			args.thoughtType = _this.thoughtType.item();
+			args.linkType = _this.thoughtLinkType.item();
+			
+			_this.saving(true);
+			PARENT.saveThought(args)
+			.done(function() {
+				_this.saving(false);
+				_this.openCloseReplyPanel(false);
+			})
+			.fail(function() {
+				_this.saving(false);
+				alert(Webtext.tx_an_error + ' ' + err);
+			});
 		}
 		
 		function onSelectionChanged(args) {
-			console.log('onSelectionChanged');
 			setInputPanelMode(InputPanelModes.None);
 			_this.inputPanelReset.raise();
 			
@@ -46,7 +68,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function updateShownItem() {
-			console.log('updateShownItem');
 			if(isItemSelected(mouseOverSelection) && !Util.hashEquals(mouseOverSelection.item(), selection.item()) && !mouseOverSelection.item().expanded)
 				showMouseOverItem();
 			else if(isItemSelected(selection))
@@ -91,15 +112,9 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 
 	function RightPanel_Presentation(ABSTR) {
 		this.init = function() {
-			//ABSTR.graph.selection.selectionChanged.subscribe(onSelectionChanged);
-			//ABSTR.graph.mouseOver.selectionChanged.subscribe(onMouseOverSelectionChanged);
-			//ABSTR.inputPanelChanged.subscribe(onInputPanelChanged);
-			//ABSTR.saving.changed.subscribe(onSavingStateChanged);
-			
-			//TODO: ABSTR.inputPanelReset
-			ABSTR.inputPanelModeChanged.subscribe(applyInputPanelMode);
+			ABSTR.inputPanelModeChanged.subscribe(showHideInputPanelControls);
 			ABSTR.shownItemChanged.subscribe(onShownItemChanged);
-			ABSTR.savingStateChanged.subscribe(onSavingStateChanged);
+			ABSTR.saving.changed.subscribe(onSavingStateChanged);
 			
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
 			$(".right_bar").resizable({
@@ -124,48 +139,15 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			linkPanel.init();
 		}
 		
-		function applyInputPanelMode() {
-			var showHide = function($n, b) { b ? $n.show() : $n.hide() };
-			showHide($('#showreply'), ABSTR.inputPanelMode != InputPanelModes.Reply);
-			showHide($('#showconnect'), ABSTR.inputPanelMode != InputPanelModes.Link);
-		}
-		
-		/*function onSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(args.value.item);
-			else if(args.value.type == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(args.value.item);
-			else if(args.value.type == null) clear();
-		}*/
-		
 		function onShownItemChanged() {
-			console.log('onShownItemChanged');
 			clear();
-			applyKindOfSelection();
-			applyContents();
-			applyInputPanel();
+			showKindOfSelection();
+			showContents();
+			showHideInputPanelControls();
 		}
 		
-		function applyKindOfSelection() {
-			console.log('applyKindOfSelection');
+		function showKindOfSelection() {
 			$('#right_bar_header #contentlabel').attr('data-bordermode', getBorderMode());
-		}
-		
-		function applyContents() {
-			console.log('applyContents');
-			switch(ABSTR.shown.type) {
-				case ConversationGraph.SelectionTypes.Conversation: applyConversationContents(); break;
-				case ConversationGraph.SelectionTypes.Thought: applyThoughtContents(); break;
-				default: clear();
-			}
-		}
-		
-		function applyInputPanel() {
-			console.log('applyInputPanel');
-			if(ABSTR.shown.kindOfSelection == ConversationGraph.BorderModes.Selected && ABSTR.shown.type == ConversationGraph.SelectionTypes.Thought) {
-				$('#showreply, #showconnect').show();
-			}
-			else {
-				$('#showreply, #showconnect').hide();
-			}
 		}
 		
 		function getBorderMode() {
@@ -176,7 +158,30 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			}
 		}
 		
-		function applyConversationContents() {
+		function showContents() {
+			console.log('applyContents');
+			switch(ABSTR.shown.type) {
+				case ConversationGraph.SelectionTypes.Conversation: showConversationContents(); break;
+				case ConversationGraph.SelectionTypes.Thought: showThoughtContents(); break;
+				default: clear();
+			}
+		}
+		
+		function showHideInputPanelControls() {
+			console.log(ABSTR.isInputPanelVisible() ? 'ip visible' : 'ip invisible');
+			if(ABSTR.isInputPanelVisible())
+				applyInputPanelMode();
+			else
+				$('#showreply, #showconnect').hide();
+		}
+		
+		function applyInputPanelMode() {
+			var showHide = function($n, b) { b ? $n.show() : $n.hide() };
+			showHide($('#showreply'), ABSTR.inputPanelMode != InputPanelModes.Reply);
+			showHide($('#showconnect'), ABSTR.inputPanelMode != InputPanelModes.Link);
+		}
+		
+		function showConversationContents() {
 			var d = ABSTR.shown.item;
 			
 			$('#right_bar_header #contentlabel .right_bar_title_main').text(d.title);
@@ -187,7 +192,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			appendLineToContent(Webtext.tx_language + ": " + d.language);
 		}
 		
-		function applyThoughtContents() {
+		function showThoughtContents() {
 			var d = ABSTR.shown.item;
 			
 			$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
@@ -196,36 +201,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			$('#contbox').html('');
 			appendLineToContent(URLlinks(nl2br(d.content)));
 		}
-		
-		function onMouseOverSelectionChanged(args) {
-			if(args.value.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(args.value.item);
-			else if(args.oldValue.type == ConversationGraph.SelectionTypes.Thought) onMouseOverThoughtChanged(null);
-		}
-		
-		/*function onMouseOverThoughtChanged(d) {
-			if(d && !Util.hashEquals(ABSTR.graph.selection.item(), d)) {
-				clear();
-				$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.MouseOver);
-				$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
-				$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
-			
-				$('#contbox').html('');
-				appendLineToContent(URLlinks(nl2br(d.content)));
-			}
-			else {
-				showSelected();
-			}
-		}*/
-		
-		/*function showSelected() {
-			clear();
-			if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Conversation) onConversationSelected(ABSTR.graph.selection.item());
-			else if(ABSTR.graph.selection.type() == ConversationGraph.SelectionTypes.Thought) onThoughtSelected(ABSTR.graph.selection.item());
-		}*/
-		
-		/*function onSomethingSelected() {
-			$('#right_bar_header #contentlabel').attr('data-bordermode', ConversationGraph.BorderModes.Selected);
-		}*/
 		
 		function clear() {
 			$('#right_bar_header #contentlabel').css('background-color', 'rgb(227,226,230)');
@@ -236,12 +211,8 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function onSavingStateChanged(state) {
-			if(state) {
-				$('#saving').show();
-			}
-			else {
-				$('#saving').fadeOut(300);
-			}
+			if(state) $('#saving').show();
+			else $('#saving').fadeOut(300);
 		}
 		
 		function appendLineToContent(text) {
@@ -262,10 +233,11 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		var _this = this;
 		
 		this.init = function() {
-			ABSTR.inputPanelModeChanged.subscribe(onChanged);
+			ABSTR.inputPanelModeChanged.subscribe(onInputPanelModeChanged);
+			ABSTR.shownItemChanged.subscribe(onShownItemChanged);
 			ABSTR.thoughtType.selectionChanged.subscribe(onThoughtTypeChanged);
 			
-			onChanged();
+			onInputPanelModeChanged();
 			
 			$('.tx_type_reply').text(Webtext.tx_type_reply);
 			$('.tx_type_connection').text(Webtext.tx_type_connection);
@@ -298,14 +270,14 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			}, thoughtLinkTypeDropDown);
 		}
 		
-		function onChanged() {
-			console.log('onChanged', ABSTR.inputPanelMode);
+		function onInputPanelModeChanged() {
 			if(ABSTR.inputPanelMode == InputPanelModes.Reply) open();
 			else close();
 		}
 		
 		function open() {
 			thoughtTypeDropDown.prepare();
+			prepareThoughtLinkTypeDropDown();
 			$('#replypanel').show();
 		}
 		
@@ -315,11 +287,25 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			$('#replyboxsum').val('');
 		}
 		
+		function show() {
+			$('#replypanel').show();
+		}
+		
+		function hide() {
+			$('#replypanel').hide();
+		}
+		
+		function onShownItemChanged() {
+			if(ABSTR.shown.kindOfSelection == KindsOfSelection.MouseOver) hide();
+			else if(ABSTR.inputPanelMode == InputPanelModes.Reply) show();
+		}
+		
 		function onThoughtTypeChanged() {
 			prepareThoughtLinkTypeDropDown();
 		}
 		
 		function prepareThoughtLinkTypeDropDown() {
+			thoughtLinkTypeDropDown.selectedId = ConversationGraph.ThoughtLinkTypes.General;
 			thoughtLinkTypeDropDown.elementIds = AllowedThoughtLinkTypes[ABSTR.thoughtType.item()];
 			thoughtLinkTypeDropDown.prepare();
 		}
@@ -353,6 +339,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		
 		this.init = function() {
 			ABSTR.inputPanelModeChanged.subscribe(applyInputPanelState);
+			ABSTR.shownItemChanged.subscribe(onShownItemChanged);
 			applyInputPanelState();
 			
 			initCaptions();
@@ -360,8 +347,13 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function applyInputPanelState() {
-			if(ABSTR.inputPanel == 'link') open();
+			if(ABSTR.inputPanelMode == InputPanelModes.Link) open();
 			else close();
+		}
+		
+		function onShownItemChanged() {
+			if(ABSTR.shown.kindOfSelection == KindsOfSelection.MouseOver) hide();
+			else if(ABSTR.inputPanelMode == InputPanelModes.Link) show();
 		}
 		
 		function initCaptions() {
@@ -386,6 +378,15 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function close() {
+			$('#linkpanel').hide();
+		}
+		
+		function show() {
+			console.log('show');
+			$('#linkpanel').show();
+		}
+		
+		function hide() {
 			$('#linkpanel').hide();
 		}
 		

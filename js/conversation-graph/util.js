@@ -51,5 +51,18 @@ define(['../event'], function(Events) {
 		return x.hash == y.hash;
 	}
 	
-	return { Selection: Selection, hashEquals: hashEquals };
+	function createObservable(value) {
+		var savedValue = value;
+		var obs = function(val) {
+			if(val !== undefined && val !== savedValue) {
+				savedValue = val;
+				obs.changed.raise(savedValue);
+			}
+			return savedValue;
+		};
+		obs.changed = new Events.EventImpl();
+		return obs;
+	}
+	
+	return { Selection: Selection, hashEquals: hashEquals, createObservable: createObservable };
 })
