@@ -147,6 +147,7 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		this._container.append('g').attr('class', 'after-conversation-links');
 		this._container.append('g').attr('class', 'after-expanded-conversations');
+		this._container.append('g').attr('class', 'after-thought-link-borders');
 		this._container.append('g').attr('class', 'after-thought-links');
 		this._container.append('g').attr('class', 'after-prelink');
 		this._container.append('g').attr('class', 'after-collapsed-conversations');
@@ -489,7 +490,7 @@ function(Events, Drag, Util, GroupCharge) {
 	/* === Events === */
 		
 		ThoughtPresentation.prototype._onLinkClicked = function(d) {
-			this._ABSTR.selectLink(d);
+			this._ABSTR.selectThoughtLink(d);
 		}
 		
 		ThoughtPresentation.prototype._onNodeClicked = function(d) {
@@ -541,7 +542,7 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		ThoughtPresentation.prototype._onMouseEnterLink = function(d) {
-			this._ABSTR.mouseOverLink(d);
+			this._ABSTR.mouseOverThoughtLink(d);
 		}
 		
 		ThoughtPresentation.prototype._onMouseLeaveLink = function(d) {
@@ -588,11 +589,11 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ThoughtPresentation.prototype._initLinkBorders = function() {
 		if(!this._objects.mouseOverLinkBorder)
-			this._objects.mouseOverLinkBorder = this._container.append('line')
+			this._objects.mouseOverLinkBorder = this._container.insert('line', '.after-thought-link-borders')
 				.attr('class', 'thought-overlink')
 				.style('stroke', '#c32222') //TODO: unify borderColors
 		if(!this._objects.selectedLinkBorder)
-			this._objects.selectedLinkBorder = this._container.append('line')
+			this._objects.selectedLinkBorder = this._container.append('line', '.after-thought-link-borders')
 				.attr('class', 'thought-selectedlink')
 				.style('stroke', '#333') //TODO: unify borderColors
 	}
