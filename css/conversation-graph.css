@@ -864,12 +864,9 @@ div.big_button:active{
 	stroke-width: 5;
 }
 
-.thought-overlink {
+.thought-overlink, .thought-selectedlink {
 	stroke-width: 8.5;
-}
-
-.thought-selectedlink {
-	stroke-width: 8.5;
+	pointer-events: none;
 }
 
 .ui-resizable { position: relative;}

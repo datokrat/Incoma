@@ -21,7 +21,12 @@ function(Events, Drag, Util, GroupCharge) {
 	}
 	
 	ConversationGraph_Abstraction.prototype.clearSelection = function() {
-		this.selection.clear();
+		if(!this.connecting()) {
+			this.selection.clear();
+			return true;
+		}
+		else
+			return false;
 	}
 	
 	ConversationGraph_Abstraction.prototype.expandConversation = function(d) {
@@ -80,6 +85,25 @@ function(Events, Drag, Util, GroupCharge) {
 		this.conversationThoughtsAdded.raise();
 	}
 	
+	ConversationGraph_Abstraction.prototype.selectConversation = function(d) {
+		if(!this.connecting())
+			this.selection.select({ type: SelectionTypes.Conversation, item: d });
+	}
+	
+	ConversationGraph_Abstraction.prototype.mouseOverConversation = function(d) {
+		if(!this.connecting())
+			this.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
+	}
+	
+	ConversationGraph_Abstraction.prototype.selectThoughtLink = function(d) {
+		if(!this.connecting())
+			this.selection.select({ type: SelectionTypes.ThoughtLink, item: d });
+	}
+	
+	ConversationGraph_Abstraction.prototype.mouseOverThoughtLink = function(d) {
+		if(!this.connecting())
+			this.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
+	}
 	
 	var ConversationPresentation = function ConversationGraph_ConversationPresentation(ABSTR, args) {
 		this._ABSTR = ABSTR;
@@ -113,7 +137,7 @@ function(Events, Drag, Util, GroupCharge) {
 			
 		this._objects.links = this._container.selectAll('.link')
             .data(this._ABSTR.graph.links)
-            .enter().append("line")
+            .enter().insert("line", '.after-conversation-links')
             .attr("class", "link")
             .style("stroke", '#888')
             .style("stroke-width", 5)
@@ -121,9 +145,12 @@ function(Events, Drag, Util, GroupCharge) {
 			.style("stroke-linecap", "round")
 			.style("stroke-opacity", 1);
 		
+		this._container.append('g').attr('class', 'after-conversation-links');
 		this._container.append('g').attr('class', 'after-expanded-conversations');
+		this._container.append('g').attr('class', 'after-thought-links');
 		this._container.append('g').attr('class', 'after-prelink');
 		this._container.append('g').attr('class', 'after-collapsed-conversations');
+		this._container.append('g').attr('class', 'after-thoughts');
 		
 		this._objects.nodes = this._container.selectAll(".conv-node")
 			.data(this._ABSTR.graph.nodes)
@@ -144,9 +171,7 @@ function(Events, Drag, Util, GroupCharge) {
 			.enter().insert('g', '.after-expanded-conversations').attr('class', 'conv-node').attr('data-expanded', true);
 		
 		this._bindNodeEvents(expandedEnter);
-			
-		/*dom = this._objects.nodes.filter(function(d2) { return Util.hashEquals(d, d2) }).remove();
-		this._container.select(function() { return this.insertBefore(dom.node(), this.querySelector('.after-expanded-conversations')) });*/
+		
 		this._objects.nodes = this._container.selectAll('.conv-node');
 		this._startWithFreshAttributes();
 	}
@@ -175,7 +200,7 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		nodes = nodes || this._objects.nodes;
 		nodes
-			.on('click', this._ABSTR.selection.selectTypeFn(SelectionTypes.Conversation))
+			.on('click', bind(this._ABSTR, 'selectConversation')/*this._ABSTR.selection.selectTypeFn(SelectionTypes.Conversation)*/)
 			.on('dblclick', bind(this, '_onDblClickConversation'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnterConversation'), bind(this, '_onMouseLeaveConversation')))
 			.call(drag);
@@ -197,7 +222,9 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ConversationPresentation.prototype._onMouseEnterConversation = function(d) {
 		if(this._dragging) return;
-		this._ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
+		
+		this._ABSTR.mouseOverConversation(d);
+		//this._ABSTR.mouseOver.select({ type: SelectionTypes.Conversation, item: d });
 		
 		if(!d.expanded) {
 			this._tooltip.$().text(d.title);
@@ -462,11 +489,20 @@ function(Events, Drag, Util, GroupCharge) {
 	/* === Events === */
 		
 		ThoughtPresentation.prototype._onLinkClicked = function(d) {
-			this._ABSTR.selection.select({ type: SelectionTypes.ThoughtLink, item: d });
+			this._ABSTR.selectLink(d);
 		}
 		
 		ThoughtPresentation.prototype._onNodeClicked = function(d) {
-			this._ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
+			if(!this._ABSTR.connecting())
+				this._ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
+			else {
+				this._stopConnecting();
+			}
+		}
+		
+		ThoughtPresentation.prototype._stopConnecting = function() {
+			this._ABSTR.connecting(false);
+			this._objects.preLink.style('stroke-opacity', 0);
 		}
 		
 		ThoughtPresentation.prototype._onSelectionChanged = function(args) {
@@ -505,7 +541,7 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		ThoughtPresentation.prototype._onMouseEnterLink = function(d) {
-			this._ABSTR.mouseOver.select({ type: SelectionTypes.ThoughtLink, item: d });
+			this._ABSTR.mouseOverLink(d);
 		}
 		
 		ThoughtPresentation.prototype._onMouseLeaveLink = function(d) {
@@ -564,21 +600,17 @@ function(Events, Drag, Util, GroupCharge) {
 	ThoughtPresentation.prototype._initPreLink = function() {
 		if(!this._objects.preLink)
 			this._objects.preLink = this._container.insert("line", '.after-prelink')
-				.attr("x1", 0)
-				.attr("y1", 0)
-				.attr("x2", 0)
-				.attr("y2", 0)
 				.style("stroke-width", 3)
 				.style("stroke", "black")
 				.style("stroke-dasharray", "8,6")
 				.style("stroke-linecap", "round")
-				.style("stroke-opacity",1);
+				.style("stroke-opacity",0);
 	}
 		
 	ThoughtPresentation.prototype._drawNewLinks = function() {
 		this._objects.newLinks = this._container.selectAll('.thought-link')
 			.data(this._ABSTR.thoughtGraph.links)
-			.enter().insert('line', '.thought-node')
+			.enter().insert('line', '.after-thought-links')
 			.attr('class', 'thought-link')
 			.on('click', bind(this, '_onLinkClicked'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnterLink'), bind(this, '_onMouseLeaveLink')))
@@ -634,7 +666,7 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		this._objects.newNodes = this._container.selectAll('.thought-node')
 			.data(this._ABSTR.thoughtGraph.nodes)
-			.enter().append('circle')
+			.enter().insert('circle', '.after-thoughts')
 			.attr('class', 'thought-node')
 			.on('click', bind(this, '_onNodeClicked'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnter'), bind(this, '_onMouseLeave')))
@@ -654,7 +686,7 @@ function(Events, Drag, Util, GroupCharge) {
 	}
 	
 	ThoughtPresentation.prototype._onMouseMove = function() {
-		if(/*this._ABSTR.connecting()*/this._ABSTR.selection.type() == SelectionTypes.Thought) {
+		if(this._ABSTR.connecting()) {
 			console.log('!!!', this._scaler.translate(d3.mouse(d3.select('svg')[0][0])));
 			var p1 = [0,0], p2 = [0,0];
 			p1[0] = this._ABSTR.selection.item().x;
@@ -665,7 +697,8 @@ function(Events, Drag, Util, GroupCharge) {
 				.attr('y1', p1[1])
 				.attr('x2', p2[0])
 				.attr('y2', p2[1])
-				.style('stroke', 'blue');
+				.style('stroke', 'blue')
+				.style('stroke-opacity', 1);
 		}
 	}
 	
@@ -677,7 +710,10 @@ function(Events, Drag, Util, GroupCharge) {
 	
 		this._gravity(e.alpha);
 		this._charge(e.alpha, 0.95);
-		
+		this._applyNodeAndLinkPositions();
+	}
+	
+	ThoughtPresentation.prototype._applyNodeAndLinkPositions = function() {
 		this._objects.nodes
 			.attr('cx', function(d) { return d.x })
 			.attr('cy', function(d) { return d.y })
@@ -686,6 +722,7 @@ function(Events, Drag, Util, GroupCharge) {
 			.attr('y1', function(d) { return d.source.y })
 			.attr('x2', function(d) { return d.target.x })
 			.attr('y2', function(d) { return d.target.y })
+		this._applyLinkBorder();
 	}
 	
 	ThoughtPresentation.prototype._gravity = function(alpha) {

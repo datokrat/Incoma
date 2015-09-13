@@ -31,6 +31,18 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			return _this.shown.type == ConversationGraph.SelectionTypes.Thought && _this.shown.kindOfSelection == KindsOfSelection.Selected;
 		}
 		
+		this.beginLinkSelection = function() {
+			//TODO: if(PARENT.graph.connecting() == true) return handleError('already connecting');
+			
+			PARENT.graph.connecting(true);
+			var subscription = PARENT.graph.connecting.changed.subscribe(function() {
+				subscription.dispose();
+				toggleInputPanelMode(InputPanelModes.Link, false);
+				//TODO: if(PARENT.graph.connecting() == true) return handleError('something went wrong');
+			});
+			return promise;
+		}
+		
 		function toggleInputPanelMode(mode, value) {
 			if(value === undefined) value = _this.inputPanelMode != mode;
 			if(!value) _this.inputPanelMode = InputPanelModes.None;
@@ -371,6 +383,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		
 		function open() {
 			$('#linkpanel').show();
+			ABSTR.beginLinkSelection().then(close);
 		}
 		
 		function close() {
@@ -464,22 +477,6 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 	
 	function values(obj) {
 		return Object.keys(obj).map(function(k) { return obj[k] });
-	}
-	
-	function mouseEnterLeave(enter, leave) {
-		var over = false;
-		return function(node) {
-			node.on('mouseover', function(d) {
-				if(over) return;
-				over = true;
-				enter(d);
-			});
-			node.on('mouseout', function(d) {
-				if(!over) return;
-				over = false;
-				leave(d);
-			});
-		}
 	}
 	
 	//replace multiple URLs inside a string in html links

@@ -46,8 +46,10 @@ define(["require", "exports"], function(require, exports) {
         };
 
         EventImpl.prototype.unsubscribe = function (cb) {
-            if (this.isListener(cb))
-                this.listeners.removeOne(cb);
+            if (this.isListener(cb)) {
+                var index = this.listeners.indexOf(cb);
+                if(index > -1) this.listeners.splice(index, 1);
+            }
         };
 
         EventImpl.prototype.raise = function (args) {
