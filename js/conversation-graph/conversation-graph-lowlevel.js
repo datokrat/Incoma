@@ -164,10 +164,10 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ConversationPresentation.prototype._onConversationExpanded = function(d) {
 		this._objects.nodes = this._container.selectAll('.conv-node');
-		var collapsedExit = this._container.selectAll('.conv-node:not([data-expanded])')
+		var collapsedExit = this._container.selectAll('.conv-node:not([data-expanded=true])')
 			.data(this._ABSTR.graph.nodes.filter(function(d) { return !d.expanded }))
 			.exit().remove();
-		var expandedEnter = this._container.selectAll('.conv-node[data-expanded]')
+		var expandedEnter = this._container.selectAll('.conv-node[data-expanded=true]')
 			.data(this._ABSTR.graph.nodes.filter(function(d) { return d.expanded }))
 			.enter().insert('g', '.after-expanded-conversations').attr('class', 'conv-node').attr('data-expanded', true);
 		
@@ -175,6 +175,14 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		this._objects.nodes = this._container.selectAll('.conv-node');
 		this._startWithFreshAttributes();
+		
+		var out = [];
+		this._objects.nodes.each(function(node) {
+			var dataExpanded = this.attributes.getNamedItem('data-expanded');
+			dataExpanded = dataExpanded && dataExpanded.value;
+			out.push({ expanded: node.expanded, d: node, data_expanded: dataExpanded, attributes: this.attributes, node: this });
+		});
+		console.log('expanded', out);
 	}
 	
 	ConversationPresentation.prototype._onConversationCollapsed = function(d) {
@@ -252,6 +260,7 @@ function(Events, Drag, Util, GroupCharge) {
 	/* === Selection Events === */
 	
 	ConversationPresentation.prototype._onMouseOverSelectionChanged = function(args) {
+		console.log(args);
 		if(args.typeChanged(SelectionTypes.Conversation)) this._onNodeAttributesChanged();
 	}
 		
@@ -898,16 +907,16 @@ function(Events, Drag, Util, GroupCharge) {
 	}
 	
 	function mouseEnterLeave(enter, leave) {
-		var over = false;
 		return function(node) {
+			var over = null;
 			node.on('mouseover', function(d) {
-				if(over) return;
-				over = true;
+				if(over == d) return;
+				over = d;
 				enter(d);
 			});
 			node.on('mouseout', function(d) {
-				if(!over) return;
-				over = false;
+				if(over === null) return;
+				over = null;
 				leave(d);
 			});
 		}
