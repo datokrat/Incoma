@@ -33,14 +33,37 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		
 		this.beginLinkSelection = function() {
 			//TODO: if(PARENT.graph.connecting() == true) return handleError('already connecting');
+			//TODO: if(PARENT.graph.selection.type() != SelectionTypes.Thought) return handleError('please select a thought');
+			var promise = new $.Deferred();
 			
+			PARENT.graph.newLinkSource = PARENT.graph.selection.item();
 			PARENT.graph.connecting(true);
 			var subscription = PARENT.graph.connecting.changed.subscribe(function() {
 				subscription.dispose();
-				toggleInputPanelMode(InputPanelModes.Link, false);
+				finishLinkSelection().done(promise.resolve).fail(promise.reject);
 				//TODO: if(PARENT.graph.connecting() == true) return handleError('something went wrong');
 			});
+			
 			return promise;
+		}
+		
+		function finishLinkSelection() {
+			if(PARENT.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return;
+			var source = PARENT.graph.newLinkSource;
+			var target = PARENT.graph.newLinkTarget;
+			
+			if(target.conversation == source.conversation) {
+				return PARENT.saveDirectInnerLink({
+					conversation: PARENT.graph.newLinkSource.conversation,
+					source: source,
+					target: target,
+					type: _this.thoughtLinkType.item()
+				});
+			}
+			else {
+			}
+		
+			toggleInputPanelMode(InputPanelModes.Link, false);
 		}
 		
 		function toggleInputPanelMode(mode, value) {

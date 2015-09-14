@@ -51,6 +51,29 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			_this.thoughtLinkType.reselect({ item: ConversationGraph.ThoughtLinkTypes.General });
 		}*/
 		
+		this.saveDirectInnerLink = function(link) {
+			var promise = $.Deferred();
+			requestUserName()
+			.then(function() {
+				return Db.saveInnerLinkAppendInfo({
+					conversation: link.conversation,
+					source: link.source,
+					target: link.target,
+					type: link.type,
+					direct: 1,
+					author: _this.userName
+				})
+			})
+			.then(function() {
+				_this.graph.addCreatedThoughtLink(link);
+				promise.resolve();
+			})
+			.fail(function() {
+				promise.reject();
+			});
+			return promise;
+		}
+		
 		this.saveThought = function(args) {
 			var promise = new $.Deferred();
 			if(_this.graph.selection.type() != ConversationGraph.SelectionTypes.Thought) return promise.reject('select a thought');

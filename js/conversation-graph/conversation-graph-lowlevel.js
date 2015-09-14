@@ -8,6 +8,7 @@ function(Events, Drag, Util, GroupCharge) {
 		this.conversationThoughtsAdded = new Events.EventImpl();
 		this.conversationThoughtsRemoved = new Events.EventImpl();
 		this.createdConversationThoughtAdded = new Events.EventImpl();
+		this.createdThoughtLinkAdded = new Events.EventImpl();
 		this.conversationExpanded = new Events.EventImpl();
 		this.conversationCollapsed = new Events.EventImpl();
 		
@@ -18,6 +19,8 @@ function(Events, Drag, Util, GroupCharge) {
 		this.mouseOver = new Util.Selection();
 		
 		this.connecting = Util.createObservable(false);
+		this.newLinkSource = null;
+		this.newLinkTarget = null;
 	}
 	
 	ConversationGraph_Abstraction.prototype.clearSelection = function() {
@@ -53,6 +56,12 @@ function(Events, Drag, Util, GroupCharge) {
 		++conv.thoughtnum;
 		this.conversationListChanged.raise();
 		this.createdConversationThoughtAdded.raise({ conversation: conv, node: node, link: link });
+	}
+		
+	ConversationGraph_Abstraction.prototype.addCreatedThoughtLink = function(link) {
+		console.log('add link', link);
+		this.addConversationThoughts(link.conversation, [], [link]);
+		this.createdThoughtLinkAdded.raise({ link: link });
 	}
 		
 	ConversationGraph_Abstraction.prototype.addConversationThoughts = function(conv, nodes, links) {
@@ -182,7 +191,6 @@ function(Events, Drag, Util, GroupCharge) {
 			dataExpanded = dataExpanded && dataExpanded.value;
 			out.push({ expanded: node.expanded, d: node, data_expanded: dataExpanded, attributes: this.attributes, node: this });
 		});
-		console.log('expanded', out);
 	}
 	
 	ConversationPresentation.prototype._onConversationCollapsed = function(d) {
@@ -260,7 +268,6 @@ function(Events, Drag, Util, GroupCharge) {
 	/* === Selection Events === */
 	
 	ConversationPresentation.prototype._onMouseOverSelectionChanged = function(args) {
-		console.log(args);
 		if(args.typeChanged(SelectionTypes.Conversation)) this._onNodeAttributesChanged();
 	}
 		
@@ -506,6 +513,7 @@ function(Events, Drag, Util, GroupCharge) {
 			if(!this._ABSTR.connecting())
 				this._ABSTR.selection.select({ type: SelectionTypes.Thought, item: d });
 			else {
+				this._ABSTR.newLinkTarget = d;
 				this._stopConnecting();
 			}
 		}
@@ -602,7 +610,7 @@ function(Events, Drag, Util, GroupCharge) {
 				.attr('class', 'thought-overlink')
 				.style('stroke', '#c32222') //TODO: unify borderColors
 		if(!this._objects.selectedLinkBorder)
-			this._objects.selectedLinkBorder = this._container.append('line', '.after-thought-link-borders')
+			this._objects.selectedLinkBorder = this._container.insert('line', '.after-thought-link-borders')
 				.attr('class', 'thought-selectedlink')
 				.style('stroke', '#333') //TODO: unify borderColors
 	}
@@ -648,15 +656,11 @@ function(Events, Drag, Util, GroupCharge) {
 		
 		if(this._ABSTR.selection.type() == SelectionTypes.ThoughtLink && sel)
 			active.push({ linkBorder: this._objects.selectedLinkBorder, d: sel })
-		if(this._ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over && !Util.hashEquals(sel, over))
+		if(this._ABSTR.mouseOver.type() == SelectionTypes.ThoughtLink && over /*&& !Util.hashEquals(sel, over)*/)
 			active.push({ linkBorder: this._objects.mouseOverLinkBorder, d: over });
 		
 		[this._objects.selectedLinkBorder, this._objects.mouseOverLinkBorder].forEach(function(linkBorder) {
-			linkBorder
-				.attr('x1', 0)
-				.attr('y1', 0)
-				.attr('x2', 0)
-				.attr('y2', 0)
+			linkBorder.style('stroke-opacity', 0);
 		});
 		active.forEach(function(item) {
 			item.linkBorder
@@ -664,6 +668,7 @@ function(Events, Drag, Util, GroupCharge) {
 				.attr('y1', item.d.source.y)
 				.attr('x2', item.d.target.x)
 				.attr('y2', item.d.target.y)
+				.style('stroke-opacity', 1);
 		})
 	}
 	
@@ -697,7 +702,6 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ThoughtPresentation.prototype._onMouseMove = function() {
 		if(this._ABSTR.connecting()) {
-			console.log('!!!', this._scaler.translate(d3.mouse(d3.select('svg')[0][0])));
 			var p1 = [0,0], p2 = [0,0];
 			p1[0] = this._ABSTR.selection.item().x;
 			p1[1] = this._ABSTR.selection.item().y;

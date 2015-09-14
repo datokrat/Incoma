@@ -136,16 +136,33 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
         else return (new $.Deferred()).resolve();
 	}
 
-
-	Db.saveLink = function(newlink){
-	    if(conversation != "sandbox" && conversation != "sandbox_es"){
-			var newlinkjs = ["hash",newlink.hash,"source",newlink.source,"target",newlink.target,"direct", newlink.direct, "evalpos",newlink.evalpos,"evalneg",newlink.evalneg,"evaluatedby",(newlink.evaluatedby).join("@@@@"),"adveval",(newlink.adveval).join("@@@@"),"advevalby",(newlink.advevalby[0]).join("@@@@")+'$$$$'+(newlink.advevalby[1]).join("@@@@")+'$$$$'+(newlink.advevalby[2]).join("@@@@")+'$$$$'+(newlink.advevalby[3]).join("@@@@")+'$$$$'+(newlink.advevalby[4]).join("@@@@")+'$$$$'+(newlink.advevalby[5]).join("@@@@"),"type",newlink.type,"author",newlink.author,"time",newlink.time];
-			newlinkstring = newlinkjs.join('####');
-			
+	Db.saveInnerLinkAppendInfo = function(link){
+	    if(link.conversation != "sandbox" && link.conversation != "sandbox_es") {
+	    	var time = Math.floor((new Date()).getTime() / 1000);
+	    	var linkData = JSON.stringify({
+	    		conversation: link.conversation.hash,
+	    		source: link.source.hash,
+	    		target: link.target.hash,
+	    		direct: link.direct,
+	    		type: link.type,
+	    		author: link.author
+	    	});
+	    	
+	    	console.log('saveInnerLinkAppendInfo', linkData);
 			var promise = new $.Deferred();
-            $.post("php/savelink.php", {newlinkphp: newlinkstring, conversation: conversation}, null, 'json')
+            $.post("php/conversation-graph/savelink.php", { data: linkData }, null, 'json')
             	.done(function(res) {
-            		if(res.success) promise.resolve();
+            		console.log('done', res);
+            		if(res.success) {
+            			link.hash = res.hash;
+            			link.time = res.time;
+            			link.evalpos = res.evalpos;
+            			link.evalneg = res.evalneg;
+            			link.evaluatedby = res.evaluatedby;
+            			link.adveval = res.adveval;
+            			link.advevalby = res.advevalby;
+            			promise.resolve(link);
+            		}
             		else promise.reject(res.error);
             	})
             	.fail(function(err) {
