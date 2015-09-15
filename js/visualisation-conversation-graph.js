@@ -1,5 +1,6 @@
-define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'scaler', 'model', 'conversation-graph/util', 'conversation-graph/right-panel'], 
-function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util, RightPanel) {
+define(['pac-builder', 'conversation-graph/conversation-graph-lowlevel', 'conversation-graph/db', 'event', 'webtext', 'scaler', 'model',
+'conversation-graph/util', 'conversation-graph/right-panel', 'conversation-graph/node-link-types', 'conversation-graph/filter-panel'], 
+function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util, RightPanel, Types, FilterPanel) {
 	function ConversationGraphVis() {
 		this.name = "conversation graph";
 		PacBuilder(this, ConversationGraph_Presentation, ConversationGraph_Abstraction, ConversationGraph_Control);
@@ -19,9 +20,11 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		var _this = this;
 		this.graph = new ConversationGraph.Abstraction();
 		this.rightPanel = new RightPanel.Abstraction(this);
+		this.filterPanel = new FilterPanel.Abstraction();
 		
 		this.init = function() {
 			this.rightPanel.init();
+			this.filterPanel.init();
 			this.graph.conversationExpanded.subscribe(onConversationExpanded);
 			
 			loadConversationList()
@@ -41,14 +44,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			if(open) _this.inputPanel = "reply";
 			else _this.inputPanel = "none";
 			_this.inputPanelChanged.raise();
-			_this.thoughtType.reselect({ item: ConversationGraph.ThoughtTypes.General });
+			_this.thoughtType.reselect({ item: Types.ThoughtTypes.General });
 		}
 		
 		this.openCloseLinkPanel = function(open) {
 			if(open) _this.inputPanel = "link";
 			else _this.inputPanel = "none";
 			_this.inputPanelChanged.raise();
-			_this.thoughtLinkType.reselect({ item: ConversationGraph.ThoughtLinkTypes.General });
+			_this.thoughtLinkType.reselect({ item: Types.ThoughtLinkTypes.General });
 		}*/
 		
 		this.saveDirectInnerLink = function(link) {
@@ -108,14 +111,14 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			        advevalby: [[],[],[],[]],
 			        type: thoughtType,
 			        author: _this.userName,
-					seed: (linkType == ConversationGraph.ThoughtLinkTypes.None) ? 1 : 0,
+					seed: (linkType == Types.ThoughtLinkTypes.None) ? 1 : 0,
 			        time: timeSeconds,
 			        x: replyTo.x + randomPlusMinus()*10*(Math.random()+1),
 			        y: replyTo.y + randomPlusMinus()*10*(Math.random()+1)
 				};
 				newNodes.push(newThought);
 				
-				if(linkType != ConversationGraph.ThoughtLinkTypes.None) {
+				if(linkType != Types.ThoughtLinkTypes.None) {
 					var newLink = {
 						hash: hash, 
 						source: newThought, 
@@ -303,6 +306,9 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			
 			rightPanel = new RightPanel.Presentation(ABSTR.rightPanel);
 			rightPanel.init();
+			
+			filterPanel = new FilterPanel.Presentation(ABSTR.filterPanel);
+			filterPanel.init();
 		}
 		
 		function initSvg() {
@@ -329,7 +335,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		var force;
 		var scaler;
 		var nodes, links;
-		var tooltip, rightPanel;
+		var tooltip, rightPanel, filterPanel;
 		var dragging = false;
 	}
 	

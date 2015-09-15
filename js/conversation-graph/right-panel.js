@@ -1,4 +1,5 @@
-define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '../conversation-graph/conversation-graph-lowlevel'], function(Webtext, DateTime, Events, Util, ConversationGraph) {
+define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '../conversation-graph/conversation-graph-lowlevel', '../conversation-graph/node-link-types'],
+function(Webtext, DateTime, Events, Util, ConversationGraph, Types) {
 
 	function RightPanel_Abstraction(PARENT) {
 		var _this = this;
@@ -227,7 +228,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			var d = ABSTR.shown.item;
 			
 			$('#right_bar_header #contentlabel').css('background-color', thoughtLiveAttributes.nodeColor(d));
-			$('#right_bar_header #contentlabel .right_bar_title_main').text(ThoughtTypeAttributes[d.type].name);
+			$('#right_bar_header #contentlabel .right_bar_title_main').text(Types.ThoughtTypeAttributes[d.type].name);
 		
 			$('#contbox').html('');
 			appendLineToContent(URLlinks(nl2br(d.content)));
@@ -285,9 +286,9 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			setPropertiesTo({
 				$nodeFn: function() { return $('#replynodetype') },
 				text: Webtext.tx_type_reply,
-				elementIds: Object.keys(ConversationGraph.ThoughtTypes).map(function(key) { return ConversationGraph.ThoughtTypes[key] }),
-				elementAttributes: ThoughtTypeAttributes,
-				selectedId: ConversationGraph.ThoughtTypes.General
+				elementIds: Object.keys(Types.ThoughtTypes).map(function(key) { return Types.ThoughtTypes[key] }),
+				elementAttributes: Types.ThoughtTypeAttributes,
+				selectedId: Types.ThoughtTypes.General
 			}, thoughtTypeDropDown);
 			
 			thoughtLinkTypeDropDown = new DdSlick();
@@ -295,9 +296,9 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			setPropertiesTo({
 				$nodeFn: function() { return $('#replylinktype') },
 				text: Webtext.tx_type_connect,
-				elementIds: Object.keys(ConversationGraph.ThoughtLinkTypes).map(function(key) { return ConversationGraph.ThoughtLinkTypes[key] }),
-				elementAttributes: ThoughtLinkTypeAttributes,
-				selectedId: ConversationGraph.ThoughtLinkTypes.General
+				elementIds: Object.keys(Types.ThoughtLinkTypes).map(function(key) { return Types.ThoughtLinkTypes[key] }),
+				elementAttributes: Types.ThoughtLinkTypeAttributes,
+				selectedId: Types.ThoughtLinkTypes.General
 			}, thoughtLinkTypeDropDown);
 		}
 		
@@ -336,7 +337,7 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 		
 		function prepareThoughtLinkTypeDropDown() {
-			thoughtLinkTypeDropDown.selectedId = ConversationGraph.ThoughtLinkTypes.General;
+			thoughtLinkTypeDropDown.selectedId = Types.ThoughtLinkTypes.General;
 			thoughtLinkTypeDropDown.elementIds = AllowedThoughtLinkTypes[ABSTR.thoughtType.item()];
 			thoughtLinkTypeDropDown.prepare();
 		}
@@ -397,9 +398,9 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 			setPropertiesTo({
 				$nodeFn: function() { return $('#connectlinktype') },
 				text: Webtext.tx_type_relation,
-				elementIds: Object.keys(ConversationGraph.ThoughtLinkTypes).map(function(key) { return ConversationGraph.ThoughtLinkTypes[key] }), //TODO: no "No Relation"
-				elementAttributes: ThoughtLinkTypeAttributes,
-				selectedId: ConversationGraph.ThoughtLinkTypes.General
+				elementIds: Object.keys(Types.ThoughtLinkTypes).map(function(key) { return Types.ThoughtLinkTypes[key] }), //TODO: no "No Relation"
+				elementAttributes: Types.ThoughtLinkTypeAttributes,
+				selectedId: Types.ThoughtLinkTypes.General
 			}, linkTypeDropDown);
 			linkTypeDropDown.prepare();
 		}
@@ -459,36 +460,11 @@ define(['../webtext', '../datetime', '../event', '../conversation-graph/util', '
 		}
 	}
 	
-	var ThoughtTypeAttributes = {};
-	ThoughtTypeAttributes[ConversationGraph.ThoughtTypes.General] = { name: Webtext.tx_general };
-	ThoughtTypeAttributes[ConversationGraph.ThoughtTypes.Question] = { name: Webtext.tx_question };
-	ThoughtTypeAttributes[ConversationGraph.ThoughtTypes.Proposal] = { name: Webtext.tx_proposal };
-	ThoughtTypeAttributes[ConversationGraph.ThoughtTypes.Info] = { name: Webtext.tx_info };
-	for(var typeId in ThoughtTypeAttributes) {
-		var attributes = ThoughtTypeAttributes[typeId];
-		attributes.value = typeId;
-		attributes.image = 'img/node'+typeId+'.png';
-	}
-	
-	var ThoughtLinkTypeAttributes = {};
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.General] = { name: Webtext.tx_general };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.Agreement] = { name: Webtext.tx_agreement };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.Disagreement] = { name: Webtext.tx_disagreement };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.Consequence] = { name: Webtext.tx_consequence };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.Alternative] = { name: Webtext.tx_alternative };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.Equivalence] = { name: Webtext.tx_equivalence };
-	ThoughtLinkTypeAttributes[ConversationGraph.ThoughtLinkTypes.None] = { name: Webtext.tx_norelation };
-	for(var typeId in ThoughtLinkTypeAttributes) {
-		var attributes = ThoughtLinkTypeAttributes[typeId];
-		attributes.value = typeId;
-		attributes.image = 'img/link'+typeId+'.png';
-	}
-	
 	var AllowedThoughtLinkTypes = arrayToObject([
-		ConversationGraph.ThoughtTypes.General, values(ConversationGraph.ThoughtLinkTypes),
-		ConversationGraph.ThoughtTypes.Question, [ConversationGraph.ThoughtLinkTypes.General, ConversationGraph.ThoughtLinkTypes.None],
-		ConversationGraph.ThoughtTypes.Proposal, [ConversationGraph.ThoughtLinkTypes.General, ConversationGraph.ThoughtLinkTypes.Alternative, ConversationGraph.ThoughtLinkTypes.None],
-		ConversationGraph.ThoughtTypes.Info, values(ConversationGraph.ThoughtLinkTypes)
+		Types.ThoughtTypes.General, values(Types.ThoughtLinkTypes),
+		Types.ThoughtTypes.Question, [Types.ThoughtLinkTypes.General, Types.ThoughtLinkTypes.None],
+		Types.ThoughtTypes.Proposal, [Types.ThoughtLinkTypes.General, Types.ThoughtLinkTypes.Alternative, Types.ThoughtLinkTypes.None],
+		Types.ThoughtTypes.Info, values(Types.ThoughtLinkTypes)
 	]);
 	
 	function arrayToObject(arr) {

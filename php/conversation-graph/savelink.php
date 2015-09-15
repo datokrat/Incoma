@@ -6,7 +6,7 @@ header('Content-Type: text/html; charset=utf-8');
 //$conversation = $_POST['conversation'];
 $link = json_decode($_POST['data']);
 $time = time(); //seconds since Jan 1, 1970, 00:00
-$hash = hashInt($link->source . $link->target . $link->author . $link->type . $time);
+$hash = hashInt($link->source . $link->target . $link->author . $link->type . $time); //TODO: Check whether hash is still available
 
 preg_match('/^[a-zA-Z0-9]+$/', $link->conversation) or die('{ "success": false, "error": "Illegal letters found in conversation hash" }');
 

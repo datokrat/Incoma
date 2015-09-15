@@ -199,9 +199,6 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 		data: { conversation: conversation},
 		async: false,
 		}).done(function(data) {
-
-		data.nodes.pop();
-		data.links.pop();
             
         if (data.nodes == ""){
 			onNoConversation(); //opennoconversationpanel();
@@ -209,6 +206,7 @@ define(['promise', 'model', 'webtext'], function(Promise, Model, webtextModule) 
 		}
 		modelfromdb =  { nodes: data.nodes, links: data.links, authors: []};
 		}).fail(function(data) {
+			alert('getmodel failed');
 	    });
 	}
 	

@@ -889,23 +889,6 @@ function(Events, Drag, Util, GroupCharge) {
 		MouseOver: 'mouseover',
 	};
 	
-	var ThoughtTypes = {
-		General: 1,
-		Question: 2,
-		Proposal: 3,
-		Info: 4,
-	};
-	
-	var ThoughtLinkTypes = {
-		General: 1,
-		Agreement: 2,
-		Disagreement: 3,
-		Consequence: 4,
-		Alternative: 5,
-		Equivalence: 6,
-		None: 0,
-	}
-	
 	function bind(_this, fnName) {
 		return _this[fnName].bind(_this);
 	}
@@ -938,7 +921,5 @@ function(Events, Drag, Util, GroupCharge) {
 		ThoughtLiveAttributes: ThoughtLiveAttributes,
 		BorderModes: BorderModes,
 		SelectionTypes: SelectionTypes,
-		ThoughtTypes: ThoughtTypes,
-		ThoughtLinkTypes: ThoughtLinkTypes
 	};
 });
