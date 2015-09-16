@@ -24,11 +24,25 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		
 		this.init = function() {
 			this.rightPanel.init();
-			this.filterPanel.init();
+			initFilterPanel();
 			this.graph.conversationExpanded.subscribe(onConversationExpanded);
 			
 			loadConversationList()
 			.then(applyConversationListToGraphData);
+		}
+		
+		function initFilterPanel() {
+			_this.filterPanel.init();
+			_this.filterPanel.control.linkFilterChanged.subscribe(onLinkFilterChanged);
+		}
+		
+		function onLinkFilterChanged(args) {
+			var type = args.itemId;
+			var predicate = function(link) { return link.type == type };
+			if(args.state == true)
+				_this.graph.showHideLinks(predicate, null);
+			else if(args.state == false)
+				_this.graph.showHideLinks(null, predicate);
 		}
 		
 		function applyConversationListToGraphData() {

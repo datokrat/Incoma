@@ -4,11 +4,14 @@ function(Events, Drag, Util, GroupCharge) {
 	function ConversationGraph_Abstraction() {
 		this.graph = { links: [], nodes: [] };
 		this.thoughtGraph = { links: [], nodes: [] };
+		
 		this.conversationListChanged = new Events.EventImpl();
 		this.conversationThoughtsAdded = new Events.EventImpl();
 		this.conversationThoughtsRemoved = new Events.EventImpl();
 		this.createdConversationThoughtAdded = new Events.EventImpl();
 		this.createdThoughtLinkAdded = new Events.EventImpl();
+		this.linksShownHidden = new Events.EventImpl();
+		
 		this.conversationExpanded = new Events.EventImpl();
 		this.conversationCollapsed = new Events.EventImpl();
 		
@@ -76,6 +79,10 @@ function(Events, Drag, Util, GroupCharge) {
 		for(var i=0; i<this.thoughtGraph.links.length; ++i) if(this.doesLinkBelongToConversation(this.thoughtGraph.links[i], conv)) this.thoughtGraph.links.splice(i--, 1);
 		
 		this.conversationThoughtsRemoved.raise(conv);
+	}
+	
+	ConversationGraph_Abstraction.prototype.showHideLinks = function(showPredicate, hidePredicate) {
+		this.linksShownHidden.raise({ showPredicate: showPredicate, hidePredicate: hidePredicate });
 	}
 	
 	ConversationGraph_Abstraction.prototype.doesLinkBelongToConversation = function(link, conv) {
@@ -421,6 +428,7 @@ function(Events, Drag, Util, GroupCharge) {
 		this._ABSTR.conversationThoughtsAdded.subscribe(bind(this, '_onConversationThoughtsAdded'));
 		this._ABSTR.createdConversationThoughtAdded.subscribe(bind(this, '_onCreatedConversationThoughtAdded'));
 		this._ABSTR.conversationThoughtsRemoved.subscribe(bind(this, '_onConversationThoughtsRemoved'));
+		this._ABSTR.linksShownHidden.subscribe(bind(this, '_onLinksShownHidden'));
 		
 		this._ABSTR.conversationPositionsChanged.subscribe(bind(this, '_startEvolution'));
 		this._ABSTR.connecting.changed.subscribe(bind(this, '_onConnectingStateChanged'));
@@ -469,6 +477,13 @@ function(Events, Drag, Util, GroupCharge) {
 	ThoughtPresentation.prototype._onConversationThoughtsRemoved = function(conv) {
 		this._removeLinks(conv);
 		this._removeNodes(conv);
+	}
+	
+	ThoughtPresentation.prototype._onLinksShownHidden = function(args) {
+		if(args.showPredicate) this._ABSTR.thoughtGraph.links.filter(args.showPredicate).forEach(function(link) { link.hidden = false; });
+		if(args.hidePredicate) this._ABSTR.thoughtGraph.links.filter(args.hidePredicate).forEach(function(link) { link.hidden = true; });
+		
+		this._startWithFreshAttributes();
 	}
 	
 	ThoughtPresentation.prototype._explode = function(x, y, color) {
@@ -641,10 +656,11 @@ function(Events, Drag, Util, GroupCharge) {
 	ThoughtPresentation.prototype._applyLinkAttributes = function(selection) {
 		selection
 			.style('stroke', this._liveAttributes.linkColor)
+			.style('visibility', this._liveAttributes.linkVisibility);
 		selection.filter(this._liveAttributes.replyLink)
-			.attr('marker-start', 'url(#thought-arrow)')
+			.attr('marker-start', 'url(#thought-arrow)');
 		selection.filter(notFn(this._liveAttributes.replyLink))
-			.attr('marker-start', 'url(#thought-invertedarrow)')
+			.attr('marker-start', 'url(#thought-invertedarrow)');
 		
 		this._applyLinkBorder();
 	}
@@ -849,7 +865,13 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		this.linkStrength = function(d) {
+			if(_this.linkVisibility(d) == 'hidden') return 0.1;
 			return d.global ? 0.5 : 1;
+		}
+		
+		this.linkVisibility = function(d) {
+			if(d.hidden == true) return 'hidden';
+			else return 'visible';
 		}
 		
 		this.replyLink = function(d) {
