@@ -1,6 +1,6 @@
 define(
-['../event', '../conversation-graph/d3-drag-with-listeners', '../conversation-graph/util', '../conversation-graph/d3-group-charge'],
-function(Events, Drag, Util, GroupCharge) {
+['../event', '../conversation-graph/d3-drag-with-listeners', '../conversation-graph/util', '../conversation-graph/d3-group-charge', '../conversation-graph/filters'],
+function(Events, Drag, Util, GroupCharge, Filters) {
 	function ConversationGraph_Abstraction() {
 		this.graph = { links: [], nodes: [] };
 		this.thoughtGraph = { links: [], nodes: [] };
@@ -11,6 +11,8 @@ function(Events, Drag, Util, GroupCharge) {
 		this.createdConversationThoughtAdded = new Events.EventImpl();
 		this.createdThoughtLinkAdded = new Events.EventImpl();
 		this.linksShownHidden = new Events.EventImpl();
+		this.nodesShownHidden = new Events.EventImpl();
+		this.sizeFilterChanged = new Events.EventImpl();
 		
 		this.conversationExpanded = new Events.EventImpl();
 		this.conversationCollapsed = new Events.EventImpl();
@@ -21,9 +23,13 @@ function(Events, Drag, Util, GroupCharge) {
 		this.selection = new Util.Selection();
 		this.mouseOver = new Util.Selection();
 		
+		this.sizeFilter = Filters.SizeFilters.None;
+		
 		this.connecting = Util.createObservable(false);
 		this.newLinkSource = null;
 		this.newLinkTarget = null;
+		
+		this.minMaxThoughtEvaluations = null;
 	}
 	
 	ConversationGraph_Abstraction.prototype.clearSelection = function() {
@@ -71,7 +77,23 @@ function(Events, Drag, Util, GroupCharge) {
 		for(var i in nodes) { nodes[i].conversation = conv; this.thoughtGraph.nodes.push(nodes[i]) }
 		for(var i in links) { links[i].conversation = conv; this.thoughtGraph.links.push(links[i]) }
 	
+		this._updateMinMaxThoughtEvaluations();
 		this.conversationThoughtsAdded.raise();
+	}
+	
+	ConversationGraph_Abstraction.prototype._updateMinMaxThoughtEvaluations = function() {
+		var nodesdifevalarray = this.thoughtGraph.nodes.map(function(e){return e.evalpos-e.evalneg;});
+		
+		var maxeval = d3.max(nodesdifevalarray);
+		var mineval = d3.min(nodesdifevalarray);
+		
+		var maxdomain = maxeval;
+		var mindomain = mineval;
+		
+		this.minMaxThoughtEvaluations = {
+			min: mindomain,
+			max: maxdomain
+		};
 	}
 	
 	ConversationGraph_Abstraction.prototype.removeConversationThoughts = function(conv) {
@@ -83,6 +105,15 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ConversationGraph_Abstraction.prototype.showHideLinks = function(showPredicate, hidePredicate) {
 		this.linksShownHidden.raise({ showPredicate: showPredicate, hidePredicate: hidePredicate });
+	}
+	
+	ConversationGraph_Abstraction.prototype.showHideNodes = function(predicate, visibility) {
+		this.nodesShownHidden.raise({ showPredicate: visibility && predicate, hidePredicate: !visibility && predicate });
+	}
+	
+	ConversationGraph_Abstraction.prototype.setThoughtSizeFilter = function(state) {
+		this.sizeFilter = state;
+		this.sizeFilterChanged.raise();
 	}
 	
 	ConversationGraph_Abstraction.prototype.doesLinkBelongToConversation = function(link, conv) {
@@ -354,7 +385,6 @@ function(Events, Drag, Util, GroupCharge) {
 	ConversationPresentation.prototype._applyNodeAttributes = function(parent) {
 		parent.selectAll('*').remove();
 		parent
-            //.attr('data-expanded', function(d) { return d.expanded })
             .append("circle")
             .attr("class", "conv node")
             .attr("r", this._liveAttributes.conversationRadius)
@@ -429,6 +459,8 @@ function(Events, Drag, Util, GroupCharge) {
 		this._ABSTR.createdConversationThoughtAdded.subscribe(bind(this, '_onCreatedConversationThoughtAdded'));
 		this._ABSTR.conversationThoughtsRemoved.subscribe(bind(this, '_onConversationThoughtsRemoved'));
 		this._ABSTR.linksShownHidden.subscribe(bind(this, '_onLinksShownHidden'));
+		this._ABSTR.nodesShownHidden.subscribe(bind(this, '_onNodesShownHidden'));
+		this._ABSTR.sizeFilterChanged.subscribe(bind(this, '_onSizeFilterChanged'));
 		
 		this._ABSTR.conversationPositionsChanged.subscribe(bind(this, '_startEvolution'));
 		this._ABSTR.connecting.changed.subscribe(bind(this, '_onConnectingStateChanged'));
@@ -483,6 +515,17 @@ function(Events, Drag, Util, GroupCharge) {
 		if(args.showPredicate) this._ABSTR.thoughtGraph.links.filter(args.showPredicate).forEach(function(link) { link.hidden = false; });
 		if(args.hidePredicate) this._ABSTR.thoughtGraph.links.filter(args.hidePredicate).forEach(function(link) { link.hidden = true; });
 		
+		this._startWithFreshAttributes();
+	}
+	
+	ThoughtPresentation.prototype._onNodesShownHidden = function(args) {
+		if(args.showPredicate) this._ABSTR.thoughtGraph.nodes.filter(args.showPredicate).forEach(function(node) { node.hidden = false; });
+		if(args.hidePredicate) this._ABSTR.thoughtGraph.nodes.filter(args.hidePredicate).forEach(function(node) { node.hidden = true; });
+		
+		this._startWithFreshAttributes();
+	}
+	
+	ThoughtPresentation.prototype._onSizeFilterChanged = function(args) {
 		this._startWithFreshAttributes();
 	}
 	
@@ -707,9 +750,10 @@ function(Events, Drag, Util, GroupCharge) {
 	
 	ThoughtPresentation.prototype._applyNodeAttributes = function(selection) {
 		selection
-			.attr('r', 15)
+			.attr('r', this._liveAttributes.nodeSize)
 			.attr('data-bordermode', this._liveAttributes.borderMode)
 			.style('fill', this._liveAttributes.nodeColor)
+            .style('visibility', this._liveAttributes.nodeVisibility)
 	}
 	
 	ThoughtPresentation.prototype._bindSvgEvents = function() {
@@ -856,6 +900,18 @@ function(Events, Drag, Util, GroupCharge) {
 			return nodeColor[d.type];
 		}
 		
+		this.nodeSize = function(d) {
+			var sizeFilter = ABSTR.sizeFilter;
+		
+			switch(sizeFilter) {
+				case Filters.SizeFilters.Evaluations:
+					console.log(d);
+					return linearScale([ABSTR.minMaxThoughtEvaluations.min-variation, 1, ABSTR.minMaxThoughtEvaluations.max+variation], [minnodesize, 15, maxnodesize], d.evalpos-d.evalneg);
+				default:
+					return 15;
+			}
+		}
+		
 		this.linkColor = function(d) {
 			return linkColor[d.type];
 		}
@@ -870,6 +926,11 @@ function(Events, Drag, Util, GroupCharge) {
 		}
 		
 		this.linkVisibility = function(d) {
+			if(d.hidden == true || _this.nodeVisibility(d.source) == 'hidden' || _this.nodeVisibility(d.target) == 'hidden') return 'hidden';
+			else return 'visible';
+		}
+		
+		this.nodeVisibility = function(d) {
 			if(d.hidden == true) return 'hidden';
 			else return 'visible';
 		}
@@ -897,6 +958,25 @@ function(Events, Drag, Util, GroupCharge) {
 		var nodeColor = ["#000000", "#f9c8a4", "#a2b0e7", "#e7a2dd", "#bae59a"];
 		//CODE        = ["#000000", "General", "Agreeme", "Disagre", "Consequ", "Alterna", "Equival"]; 
 		var linkColor = ["#000000", "#f9c8a4", "#7adc7c", "#e85959", "#b27de8", "#c87b37", "#ecaa41"];
+		
+		var minnodesize = 6;
+		var maxnodesize = 30;
+		var variation = 3; //sets the variation of the sizes, they are bigger when 'variation' is closer to zero.
+	}
+	
+	function linearScale(source, target, value) {
+		if(value < source[0]) return target[0];
+		for(var i=1; i<source.length; ++i) {
+			if(value < source[i]) {
+				var srcSegment = source[i]-source[i-1];
+				var targSegment = target[i]-target[i-1];
+				var stretch = targSegment/srcSegment;
+				var distFromSrcSegmentStart = value - source[i-1];
+				var distFromTargSegmentStart = distFromSrcSegmentStart * stretch;
+				return target[i-1] + distFromTargSegmentStart;
+			}
+		}
+		return target[source.length-1];
 	}
 	
 	var SelectionTypes = {

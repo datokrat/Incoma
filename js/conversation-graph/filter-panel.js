@@ -1,5 +1,5 @@
-define(['../webtext', '../event', '../filtercategory', '../conversation-graph/conversation-graph-lowlevel', '../conversation-graph/node-link-types'], 
-function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
+define(['../webtext', '../event', '../filtercategory', '../conversation-graph/conversation-graph-lowlevel', '../conversation-graph/node-link-types', '../conversation-graph/filters'], 
+function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 	
 	function FilterPanel_Abstraction() {
 		var _this = this;
@@ -11,6 +11,10 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 			initState();
 			initFilters();
 			this.control.init();
+		}
+		
+		this.raiseInitialEvents = function() {
+			_this.sizeFilterCategory.raiseInitialEvents();
 		}
 		
 		function initState() {
@@ -48,27 +52,27 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 			}
 			
 			var initState = [];
-			for(var id in NodeFilters) initState[NodeFilters[id]] = true;
+			for(var id in Filters.NodeFilters) initState[Filters.NodeFilters[id]] = true;
 			_this.nodeFilterCategory = new FilterCategories.MultiSelect_Abstraction({
-				itemIds: NodeFilters,
+				itemIds: Filters.NodeFilters,
 				initState: initState,
 			});
 			
 			initState = [];
-			for(var id in LinkFilters) initState[LinkFilters[id]] = true;
+			for(var id in Filters.LinkFilters) initState[Filters.LinkFilters[id]] = true;
 			_this.linkFilterCategory = new FilterCategories.MultiSelect_Abstraction({
-				itemIds: LinkFilters,
+				itemIds: Filters.LinkFilters,
 				initState: initState,
 			});
 			
 			/*_this.showFilterCategory = new FilterCategories.SingleSelect_Abstraction({
-				possibleStates: ShowFilters,
-				initState: ShowFilters.None,
-			});
-			_this.sizeFilterCategory = new FilterCategories.SingleSelect_Abstraction({
-				possibleStates: SizeFilters,
-				initState: SizeFilters.Evaluations,
+				possibleStates: Filters.ShowFilters,
+				initState: Filters.ShowFilters.None,
 			});*/
+			_this.sizeFilterCategory = new FilterCategories.SingleSelect_Abstraction({
+				possibleStates: Filters.SizeFilters,
+				initState: Filters.SizeFilters.Evaluations,
+			});
 			
 			_this.nodeEvalFilter = {
 				value: 0,
@@ -164,14 +168,14 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 	        $( "#filters_title" ).click(ABSTR.toggleFilterPanelVisibility);
 	        
 	        function showWebtext(text) { $('.'+text).text(Webtext[text]) }
-	        ['tx_legend', 'tx_click_hide_show', 'tx_thoughts', 'tx_connections'].forEach(function(tx) { showWebtext(tx) });
+	        ['tx_legend', 'tx_click_hide_show', 'tx_thoughts', 'tx_connections', 'tx_sizes'].forEach(function(tx) { showWebtext(tx) });
 	        
 	        //initSliders();
 	        
 	        initNodeFilters();
 	        initLinkFilters();
 			//initShowFilters();
-	        //initSizeFilters();
+	        initSizeFilters();
 		}
 		
 		/*function initSliders() {
@@ -184,10 +188,9 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 		// Start of initNodeFilters = create the html from the filters, appending it (appendChild) to the right div tags
 	    function initNodeFilters() {
 			var filterItems = [];
-			for(var key in NodeFilters) {
-				var id = NodeFilters[key];
+			for(var key in Filters.NodeFilters) {
+				var id = Filters.NodeFilters[key];
 				filterItems[id] = {
-					//node: _this.nodeFilterTextDoms[id], 
 					id: id, name: ABSTR.nodeFilters[id].name, imageWidth: '32px', onClick: onClickFilterItem, 
 					getImagePath: function() { return ABSTR.nodeFilters[this.id].image },
 				};
@@ -206,12 +209,12 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 		
 		/*function initShowFilters() {
 			var showFilterInfo = [];
-			showFilterInfo[ShowFilters.Tags] = { id: ShowFilters.Tags, name: Webtext.tx_tags, onClick: onClickFilterItem };
-			showFilterInfo[ShowFilters.Summaries] = { id: ShowFilters.Summaries, name: Webtext.tx_summaries, onClick: onClickFilterItem };
-			showFilterInfo[ShowFilters.Authors] = { id: ShowFilters.Authors, name: Webtext.tx_authors, onClick: onClickFilterItem };
+			showFilterInfo[Filters.ShowFilters.Tags] = { id: Filters.ShowFilters.Tags, name: Webtext.tx_tags, onClick: onClickFilterItem };
+			showFilterInfo[Filters.ShowFilters.Summaries] = { id: Filters.ShowFilters.Summaries, name: Webtext.tx_summaries, onClick: onClickFilterItem };
+			showFilterInfo[Filters.ShowFilters.Authors] = { id: Filters.ShowFilters.Authors, name: Webtext.tx_authors, onClick: onClickFilterItem };
 			
 			if (Model.tags == null)
-				delete showFilterInfo[ShowFilters.Tags];
+				delete showFilterInfo[Filters.ShowFilters.Tags];
 				
 			_this.showFilter = new FilterCategories.SingleSelect_Presentation(ABSTR.showFilterCategory, showFilterInfo, {
 				itemsPerRow: 1,
@@ -228,8 +231,8 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 	        var cellsPerRow = filtsPerRow * 3;
 			
 			var filterItems = [];
-			for(var key in LinkFilters) {
-				var id = LinkFilters[key];
+			for(var key in Filters.LinkFilters) {
+				var id = Filters.LinkFilters[key];
 				filterItems[id] = {
 					//node: _this.linkFilterTextDoms[id],
 					id: id, name: ABSTR.linkFilters[id].name, onClick: onClickFilterItem, imageWidth: '20px',
@@ -243,21 +246,20 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 			});
 	    };
 		
-	    /*function initSizeFilters() {
+	    function initSizeFilters() {
 	    	var sizeFilterInfo = [];
-	    	sizeFilterInfo[SizeFilters.Evaluations] = 
-	    		{ name: Webtext.tx_evaluations, id: SizeFilters.Evaluations, onClick: onClickFilterItem };
+	    	sizeFilterInfo[Filters.SizeFilters.Evaluations] = 
+	    		{ name: Webtext.tx_evaluations, id: Filters.SizeFilters.Evaluations, onClick: onClickFilterItem };
 			
 			_this.sizeFilter = new FilterCategories.SingleSelect_Presentation(ABSTR.sizeFilterCategory, sizeFilterInfo, {
 				itemsPerRow: 1,
 				useImages: false,
 				parent: $('#filt_sizes')[0]
 			});
-	    };*/
+	    };
 	    
 	    function onClickFilterItem() {
 	    	ABSTR.clickFilterItem();
-			//TODO: updateFiltersHelpVisibility();
 	    }
 	    
 		/*function nodeslider (x){
@@ -322,7 +324,7 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 			_this.nodeFilterChanged = abstraction.nodeFilterCategory.itemChanged;
 			_this.linkFilterChanged = abstraction.linkFilterCategory.itemChanged;
 			//_this.showFilterChanged = abstraction.showFilterCategory.stateChanged;
-			//_this.sizeFilterChanged = abstraction.sizeFilterCategory.stateChanged;
+			_this.sizeFilterChanged = abstraction.sizeFilterCategory.stateChanged;
 			
 			_this.shownNodesAndLinksChanged = abstraction.shownNodesAndLinksChanged;
 			_this.hideShowFilters = abstraction.toggleFilterPanelVisibility;
@@ -340,32 +342,32 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types) {
 		}
 	}
 	
-	var ShowFilters = {
+	/*var Filters.ShowFilters = {
 		None: 0,
 		Summaries: 1,
 		Authors: 2,
 		Tags: 3,
 	};
 	
-	var SizeFilters = {
+	var Filters.SizeFilters = {
 		None: 0,
 		Evaluations: 1,
 	};
 	
-	var NodeFilters = Types.ThoughtTypes;
+	var Filters.NodeFilters = Types.ThoughtTypes;
 	
-	var LinkFilters = {};
+	var Filters.LinkFilters = {};
 	for(var i in Types.ThoughtLinkTypes) {
 		var type = Types.ThoughtLinkTypes[i];
 		var attributes = Types.ThoughtLinkTypeAttributes[type];
 		if(attributes.isNullLink === true) break;
-		else LinkFilters[i] = type;
-	}
+		else Filters.LinkFilters[i] = type;
+	}*/
 	
 	return { 
 		Abstraction: FilterPanel_Abstraction, 
 		Presentation: FilterPanel_Presentation,
-		ShowFilters: ShowFilters, 
-		SizeFilters: SizeFilters,
+		/*Filters.ShowFilters: Filters.ShowFilters, 
+		Filters.SizeFilters: Filters.SizeFilters,*/
 	};
 });

@@ -34,6 +34,9 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		function initFilterPanel() {
 			_this.filterPanel.init();
 			_this.filterPanel.control.linkFilterChanged.subscribe(onLinkFilterChanged);
+			_this.filterPanel.control.nodeFilterChanged.subscribe(onNodeFilterChanged);
+			_this.filterPanel.control.sizeFilterChanged.subscribe(onSizeFilterChanged);
+			_this.filterPanel.raiseInitialEvents();
 		}
 		
 		function onLinkFilterChanged(args) {
@@ -43,6 +46,17 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 				_this.graph.showHideLinks(predicate, null);
 			else if(args.state == false)
 				_this.graph.showHideLinks(null, predicate);
+		}
+		
+		function onNodeFilterChanged(args) {
+			var type = args.itemId;
+			var predicate = function(node) { return node.type == type };
+			
+			_this.graph.showHideNodes(predicate, args.state);
+		}
+		
+		function onSizeFilterChanged(args) {
+			_this.graph.setThoughtSizeFilter(args.state);
 		}
 		
 		function applyConversationListToGraphData() {

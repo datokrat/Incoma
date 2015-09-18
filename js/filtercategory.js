@@ -45,6 +45,10 @@ define(['event', 'visualisation'], function(Events, Visualisations) {
 			_this.state = args.initState;
 		}
 		
+		this.raiseInitialEvents = function() {
+			_this.stateChanged.raise({ state: _this.state });
+		}
+		
 		this.toggleItem = function(item) {
 			if(_this.state == item) _this.state = _this.possibleStates.None;
 			else _this.state = item;
