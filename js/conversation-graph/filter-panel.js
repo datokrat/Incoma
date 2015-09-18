@@ -15,6 +15,7 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 		
 		this.raiseInitialEvents = function() {
 			_this.sizeFilterCategory.raiseInitialEvents();
+			_this.showFilterCategory.raiseInitialEvents();
 		}
 		
 		function initState() {
@@ -65,10 +66,10 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 				initState: initState,
 			});
 			
-			/*_this.showFilterCategory = new FilterCategories.SingleSelect_Abstraction({
+			_this.showFilterCategory = new FilterCategories.SingleSelect_Abstraction({
 				possibleStates: Filters.ShowFilters,
 				initState: Filters.ShowFilters.None,
-			});*/
+			});
 			_this.sizeFilterCategory = new FilterCategories.SingleSelect_Abstraction({
 				possibleStates: Filters.SizeFilters,
 				initState: Filters.SizeFilters.Evaluations,
@@ -168,13 +169,13 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 	        $( "#filters_title" ).click(ABSTR.toggleFilterPanelVisibility);
 	        
 	        function showWebtext(text) { $('.'+text).text(Webtext[text]) }
-	        ['tx_legend', 'tx_click_hide_show', 'tx_thoughts', 'tx_connections', 'tx_sizes'].forEach(function(tx) { showWebtext(tx) });
+	        ['tx_legend', 'tx_click_hide_show', 'tx_thoughts', 'tx_connections', 'tx_sizes', 'tx_show'].forEach(function(tx) { showWebtext(tx) });
 	        
 	        //initSliders();
 	        
 	        initNodeFilters();
 	        initLinkFilters();
-			//initShowFilters();
+			initShowFilters();
 	        initSizeFilters();
 		}
 		
@@ -207,21 +208,18 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 			});
 	    }
 		
-		/*function initShowFilters() {
+		function initShowFilters() {
 			var showFilterInfo = [];
-			showFilterInfo[Filters.ShowFilters.Tags] = { id: Filters.ShowFilters.Tags, name: Webtext.tx_tags, onClick: onClickFilterItem };
+			//showFilterInfo[Filters.ShowFilters.Tags] = { id: Filters.ShowFilters.Tags, name: Webtext.tx_tags, onClick: onClickFilterItem };
 			showFilterInfo[Filters.ShowFilters.Summaries] = { id: Filters.ShowFilters.Summaries, name: Webtext.tx_summaries, onClick: onClickFilterItem };
 			showFilterInfo[Filters.ShowFilters.Authors] = { id: Filters.ShowFilters.Authors, name: Webtext.tx_authors, onClick: onClickFilterItem };
 			
-			if (Model.tags == null)
-				delete showFilterInfo[Filters.ShowFilters.Tags];
-				
 			_this.showFilter = new FilterCategories.SingleSelect_Presentation(ABSTR.showFilterCategory, showFilterInfo, {
 				itemsPerRow: 1,
 				useImages: false,
 				parent: $('#filt_show')[0]
 			});
-		}*/
+		}
 		
 	    function initLinkFilters() {
 			// 6 filters with 2 per column for the links
@@ -234,7 +232,6 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 			for(var key in Filters.LinkFilters) {
 				var id = Filters.LinkFilters[key];
 				filterItems[id] = {
-					//node: _this.linkFilterTextDoms[id],
 					id: id, name: ABSTR.linkFilters[id].name, onClick: onClickFilterItem, imageWidth: '20px',
 					getImagePath: function() { return ABSTR.linkFilters[this.id].image },
 				};
@@ -323,7 +320,7 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 			
 			_this.nodeFilterChanged = abstraction.nodeFilterCategory.itemChanged;
 			_this.linkFilterChanged = abstraction.linkFilterCategory.itemChanged;
-			//_this.showFilterChanged = abstraction.showFilterCategory.stateChanged;
+			_this.showFilterChanged = abstraction.showFilterCategory.stateChanged;
 			_this.sizeFilterChanged = abstraction.sizeFilterCategory.stateChanged;
 			
 			_this.shownNodesAndLinksChanged = abstraction.shownNodesAndLinksChanged;
@@ -342,32 +339,8 @@ function(Webtext, Events, FilterCategories, ConversationGraph, Types, Filters) {
 		}
 	}
 	
-	/*var Filters.ShowFilters = {
-		None: 0,
-		Summaries: 1,
-		Authors: 2,
-		Tags: 3,
-	};
-	
-	var Filters.SizeFilters = {
-		None: 0,
-		Evaluations: 1,
-	};
-	
-	var Filters.NodeFilters = Types.ThoughtTypes;
-	
-	var Filters.LinkFilters = {};
-	for(var i in Types.ThoughtLinkTypes) {
-		var type = Types.ThoughtLinkTypes[i];
-		var attributes = Types.ThoughtLinkTypeAttributes[type];
-		if(attributes.isNullLink === true) break;
-		else Filters.LinkFilters[i] = type;
-	}*/
-	
 	return { 
 		Abstraction: FilterPanel_Abstraction, 
 		Presentation: FilterPanel_Presentation,
-		/*Filters.ShowFilters: Filters.ShowFilters, 
-		Filters.SizeFilters: Filters.SizeFilters,*/
 	};
 });

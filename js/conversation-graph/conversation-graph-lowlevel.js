@@ -13,6 +13,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this.linksShownHidden = new Events.EventImpl();
 		this.nodesShownHidden = new Events.EventImpl();
 		this.sizeFilterChanged = new Events.EventImpl();
+		this.infoFilterChanged = new Events.EventImpl();
 		
 		this.conversationExpanded = new Events.EventImpl();
 		this.conversationCollapsed = new Events.EventImpl();
@@ -24,6 +25,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this.mouseOver = new Util.Selection();
 		
 		this.sizeFilter = Filters.SizeFilters.None;
+		this.infoFilter = Filters.ShowFilters.None;
 		
 		this.connecting = Util.createObservable(false);
 		this.newLinkSource = null;
@@ -116,6 +118,11 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this.sizeFilterChanged.raise();
 	}
 	
+	ConversationGraph_Abstraction.prototype.setThoughtInfoFilter = function(state) {
+		this.infoFilter = state;
+		this.infoFilterChanged.raise();
+	}
+	
 	ConversationGraph_Abstraction.prototype.doesLinkBelongToConversation = function(link, conv) {
 		if(link.global)
 			return Util.hashEquals(link.sourceConversation, conv) || Util.hashEquals(link.targetConversation, conv);
@@ -170,6 +177,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this._ABSTR.conversationCollapsed.subscribe(bind(this, '_onConversationCollapsed'));
 		
 		this._ABSTR.conversationListChanged.subscribe(bind(this, '_onConversationListChanged'));
+		this._ABSTR.infoFilterChanged.subscribe(bind(this, '_onInfoFilterChanged'));
 		
 		this._force = d3.layout.force()
 			.charge(this._liveAttributes.charge)
@@ -207,6 +215,9 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this._bindNodeEvents();
 		this._bindForceEvents();
 		this._startWithFreshAttributes();
+	}
+	
+	ConversationPresentation.prototype._onInfoFilterChanged = function() {
 	}
 	
 	ConversationPresentation.prototype._onConversationExpanded = function(d) {
@@ -461,6 +472,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		this._ABSTR.linksShownHidden.subscribe(bind(this, '_onLinksShownHidden'));
 		this._ABSTR.nodesShownHidden.subscribe(bind(this, '_onNodesShownHidden'));
 		this._ABSTR.sizeFilterChanged.subscribe(bind(this, '_onSizeFilterChanged'));
+		this._ABSTR.infoFilterChanged.subscribe(bind(this, '_onInfoFilterChanged'));
 		
 		this._ABSTR.conversationPositionsChanged.subscribe(bind(this, '_startEvolution'));
 		this._ABSTR.connecting.changed.subscribe(bind(this, '_onConnectingStateChanged'));
@@ -527,6 +539,17 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 	
 	ThoughtPresentation.prototype._onSizeFilterChanged = function(args) {
 		this._startWithFreshAttributes();
+	}
+	
+	ThoughtPresentation.prototype._onInfoFilterChanged = function(args) {
+		this._redrawNodes();
+		this._startWithFreshAttributes();
+	}
+	
+	ThoughtPresentation.prototype._redrawNodes = function() {
+		console.log('redrawNodes');
+		this._objects.nodes.remove();
+		this._drawNewNodes();
 	}
 	
 	ThoughtPresentation.prototype._explode = function(x, y, color) {
@@ -738,9 +761,25 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 			dragBehavior.on('dragend.incoma', function(d) { self._dragging = false; });
 		}, this._force);
 		
-		this._objects.newNodes = this._container.selectAll('.thought-node')
+		var enter = this._container.selectAll('.thought-node')
 			.data(this._ABSTR.thoughtGraph.nodes)
-			.enter().insert('circle', '.after-thoughts')
+			.enter();
+		
+		console.log(this._ABSTR.infoFilter, Filters.ShowFilters);
+		if(this._ABSTR.infoFilter != Filters.ShowFilters.Summaries) {
+			this._objects.newNodes = enter.insert('circle', '.after-thoughts');
+		}
+		else {
+			this._objects.newNodes = enter.insert('g', '.after-thoughts');
+			this._objects.newNodes.append('circle')
+				.attr('class', 'thought-info-rect')
+			this._objects.newNodes.append('text')
+				.attr('class', 'thought-info-text')
+				.style('font-size', '4px')
+				.style('pointer-events', 'none');
+		}
+		
+		this._objects.newNodes
 			.attr('class', 'thought-node')
 			.on('click', bind(this, '_onNodeClicked'))
 			.call(mouseEnterLeave(bind(this, '_onMouseEnter'), bind(this, '_onMouseLeave')))
@@ -749,11 +788,27 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 	}
 	
 	ThoughtPresentation.prototype._applyNodeAttributes = function(selection) {
-		selection
-			.attr('r', this._liveAttributes.nodeSize)
-			.attr('data-bordermode', this._liveAttributes.borderMode)
-			.style('fill', this._liveAttributes.nodeColor)
-            .style('visibility', this._liveAttributes.nodeVisibility)
+		if(this._ABSTR.infoFilter != Filters.ShowFilters.Summaries) {
+			selection
+				.attr('r', this._liveAttributes.nodeSize)
+				.attr('data-bordermode', this._liveAttributes.borderMode)
+				.style('fill', this._liveAttributes.nodeColor)
+		        .style('visibility', this._liveAttributes.nodeVisibility)
+		}
+		else {
+			var rects = selection.select('.thought-info-rect');
+			rects
+				.attr('r', this._liveAttributes.nodeSize)
+				.attr('data-bordermode', this._liveAttributes.borderMode)
+				.style('fill', this._liveAttributes.nodeColor);
+			var texts = selection.select('.thought-info-text')
+				.attr('text-anchor', 'middle')
+				.text(this._liveAttributes.summary)
+				.style('font-style', this._liveAttributes.nodeFontStyle);
+			//TODO: vertical text-anchor: middle - how to?
+			selection
+				.style('visibility', this._liveAttributes.nodeVisibility);
+		}
 	}
 	
 	ThoughtPresentation.prototype._bindSvgEvents = function() {
@@ -789,8 +844,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 	
 	ThoughtPresentation.prototype._applyNodeAndLinkPositions = function() {
 		this._objects.nodes
-			.attr('cx', function(d) { return d.x })
-			.attr('cy', function(d) { return d.y })
+			.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')' });
 		this._objects.links
 			.attr('x1', function(d) { return d.source.x })
 			.attr('y1', function(d) { return d.source.y })
@@ -822,7 +876,7 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 			group.push(node);
 		}
 		for(var hash in nodeGroups) {
-			GroupCharge.applyCharge(nodeGroups[hash], alpha, theta, function() { return -500 });
+			GroupCharge.applyCharge(nodeGroups[hash], alpha, theta, this._liveAttributes.nodeCharge);
 		}
 	}
 
@@ -864,10 +918,10 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		}
 		
 		var collapsed = new CollapsedConversationLiveAttributes();
-		var expanded = new ExpandedConversationLiveAttributes();
+		var expanded = new ExpandedConversationLiveAttributes(ABSTR);
 	}
 	
-	function CollapsedConversationLiveAttributes(ABSTR) {
+	function CollapsedConversationLiveAttributes() {
 		this.conversationRadius = 15;
 		this.charge = -500;
 		this.conversationLoading = false;
@@ -905,11 +959,14 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 		
 			switch(sizeFilter) {
 				case Filters.SizeFilters.Evaluations:
-					console.log(d);
 					return linearScale([ABSTR.minMaxThoughtEvaluations.min-variation, 1, ABSTR.minMaxThoughtEvaluations.max+variation], [minnodesize, 15, maxnodesize], d.evalpos-d.evalneg);
 				default:
 					return 15;
 			}
+		}
+		
+		this.nodeCharge = function(d) {
+			return -500;
 		}
 		
 		this.linkColor = function(d) {
@@ -952,6 +1009,11 @@ function(Events, Drag, Util, GroupCharge, Filters) {
 				if(d.content.length > 60) return '[' + d.content.slice(0, 60) + '...]';
 				else return '[' + d.content + ']';
 			}
+		}
+		
+		this.nodeFontStyle = function(d) {
+			if(d.contentsum) return 'none';
+			else return 'italic';
 		}
 		
 		//CODE        = ["#000000", "General", "Questio", "Proposa", "Info   "];

@@ -845,17 +845,17 @@ div.big_button:active{
 	fill-opacity: 1.0;
 }
 
-.thought-node[data-bordermode=normal], .node[data-bordermode=normal] {
+.thought-node[data-bordermode=normal], .node[data-bordermode=normal], .thought-info-rect[data-bordermode=normal] {
 	stroke-width: 1px;
 	stroke: #888;
 }
 
-.thought-node[data-bordermode=selected], .node[data-bordermode=selected] {
+.thought-node[data-bordermode=selected], .node[data-bordermode=selected], .thought-info-rect[data-bordermode=selected] {
 	stroke-width: 3px;
 	stroke: #333;
 }
 
-.thought-node[data-bordermode=mouseover], .node[data-bordermode=mouseover] {
+.thought-node[data-bordermode=mouseover], .node[data-bordermode=mouseover], .thought-info-rect[data-bordermode=mouseover] {
 	stroke-width: 3px;
 	stroke: #c32222;
 }

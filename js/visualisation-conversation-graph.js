@@ -36,6 +36,7 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 			_this.filterPanel.control.linkFilterChanged.subscribe(onLinkFilterChanged);
 			_this.filterPanel.control.nodeFilterChanged.subscribe(onNodeFilterChanged);
 			_this.filterPanel.control.sizeFilterChanged.subscribe(onSizeFilterChanged);
+			_this.filterPanel.control.showFilterChanged.subscribe(onInfoFilterChanged);
 			_this.filterPanel.raiseInitialEvents();
 		}
 		
@@ -57,6 +58,10 @@ function(PacBuilder, ConversationGraph, Db, Events, Webtext, Scaler, Model, Util
 		
 		function onSizeFilterChanged(args) {
 			_this.graph.setThoughtSizeFilter(args.state);
+		}
+		
+		function onInfoFilterChanged(args) {
+			_this.graph.setThoughtInfoFilter(args.state);
 		}
 		
 		function applyConversationListToGraphData() {
